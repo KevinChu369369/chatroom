@@ -1,0 +1,17 @@
+services:
+  websocket:
+    container_name: swoole-chatroom
+    image: swoole-chatroom
+    build: .
+    ports:
+      - "9501:9501"
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_USER=root
+      - DB_PASSWORD=
+      - DB_NAME=chatroom
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mysql_data:
