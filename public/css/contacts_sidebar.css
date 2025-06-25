@@ -1,0 +1,101 @@
+.contacts-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--app-bg);
+}
+
+.contacts-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.contact-item {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-bottom: 1px solid var(--app-border);
+}
+
+.contact-item:hover {
+    background-color: var(--app-hover);
+}
+
+.contact-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.contact-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.contact-email {
+    color: var(--app-text-secondary);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Search box styles */
+.contacts-sidebar .search-box {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--app-border);
+}
+
+.contacts-sidebar .search-box input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background-color: var(--app-hover);
+}
+
+/* Header styles */
+.contacts-sidebar .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--app-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Modal styles */
+.modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--app-border);
+    padding: 1rem 1.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--app-border);
+    padding: 1rem 1.5rem;
+}
+
+.form-control {
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+}
+
+.form-control:focus {
+    border-color: var(--app-primary);
+    box-shadow: 0 0 0 0.2rem rgba(44, 107, 237, 0.15);
+}

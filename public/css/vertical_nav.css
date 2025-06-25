@@ -1,0 +1,141 @@
+.nav-content {
+    padding: 1rem;
+}
+
+/* Vertical Navigation */
+.vertical-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 85px;
+    background: var(--app-bg);
+    border-right: 1px solid var(--app-border);
+    transition: width 0.3s ease;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.vertical-nav.expanded {
+    width: var(--nav-width);
+}
+
+.nav-toggle {
+    padding: 1rem;
+    text-align: center;
+}
+
+.nav-toggle .navbar-toggler {
+    border: none;
+    background: none;
+    padding: 0;
+}
+
+.nav-header {
+    text-align: center;
+    margin-bottom: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+
+}
+
+.expanded .nav-header {
+    opacity: 1;
+}
+
+.nav-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.nav-item {
+    margin-bottom: 0.5rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    color: var(--app-text);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+
+.nav-link:hover {
+    background-color: var(--app-hover);
+    color: var(--app-primary);
+}
+
+.nav-link.active {
+    background-color: var(--app-message-sent);
+    color: var(--app-primary);
+}
+
+.nav-link i {
+    font-size: 1.25rem;
+    min-width: 24px;
+}
+
+.nav-link span {
+    margin-left: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    white-space: nowrap;
+    display: none;
+}
+
+.expanded .nav-link span {
+    opacity: 1;
+    display: inline;
+}
+
+/* Navbar */
+.navbar {
+    padding: 0.5rem 1rem;
+    background-color: var(--app-bg);
+    border-bottom: 1px solid var(--app-border);
+}
+
+.navbar-toggler {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--app-border);
+    border-radius: 0.25rem;
+    background-color: transparent;
+}
+
+.navbar-toggler:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.navbar-nav {
+    display: flex;
+    flex-direction: column;
+    padding-left: 0;
+    margin-bottom: 0;
+    list-style: none;
+}
+
+.nav-link {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: var(--app-text);
+    text-decoration: none;
+    transition: color 0.15s ease-in-out;
+}
+
+.nav-link:hover {
+    color: var(--app-primary);
+}
+
+@media (max-width: 768px) {
+    .chat-layout {
+        margin-left: 0;
+    }
+
+    .chat-layout.nav-expanded {
+        margin-left: 0;
+    }
+}
