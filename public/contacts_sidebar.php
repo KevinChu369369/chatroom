@@ -2,6 +2,19 @@
 require_once __DIR__ . '/check_session.php';
 require_once __DIR__ . '/../config.php';
 
+// Check if this is an AJAX request
+function is_ajax_request()
+{
+    return isset($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+}
+
+// If not an AJAX request, return 403 Forbidden
+if (!is_ajax_request()) {
+    header('Location: /chatroom/public/index.php');
+    exit;
+}
+
 // Get all users except current user
 $stmt = $conn->prepare("SELECT id, username, email FROM users WHERE id != ? ORDER BY username");
 $stmt->bind_param("i", $_SESSION['user_id']);

@@ -37,7 +37,11 @@ document.addEventListener("DOMContentLoaded", function () {
       setActiveMenuItem(this);
 
       // Load contacts into sidebar
-      fetch("contacts_sidebar.php")
+      fetch("contacts_sidebar.php", {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
         .then((response) => response.text())
         .then((html) => {
           const chatSidebar = document.querySelector(".chat-sidebar");
