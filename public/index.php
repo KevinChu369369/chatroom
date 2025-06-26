@@ -104,6 +104,7 @@ function get_initials($name)
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <link rel="stylesheet" href="css/share.css">
     <link rel="stylesheet" href="css/index.css">
+    <link rel="stylesheet" href="css/contacts_sidebar.css">
 </head>
 
 <body>
@@ -175,6 +176,7 @@ function get_initials($name)
     <script src="https://cdn.jsdelivr.net/npm/picmo@latest/dist/umd/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@picmo/popup-picker@latest/dist/umd/index.js"></script>
     <script src="js/websocket.js"></script>
+    <script src="js/contacts_sidebar.js"></script>
     <script>
         let currentRoom = 0;
         let currentUser = '<?php echo $_SESSION['username']; ?>';

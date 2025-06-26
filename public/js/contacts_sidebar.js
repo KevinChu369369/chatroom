@@ -1,25 +1,3 @@
-document.addEventListener("DOMContentLoaded", function () {
-  // Handle contact search
-  const contactSearch = document.getElementById("contactSearch");
-  if (contactSearch) {
-    contactSearch.addEventListener("input", function (e) {
-      const searchTerm = e.target.value.toLowerCase();
-      document.querySelectorAll(".contact-item").forEach((item) => {
-        const contactName = item
-          .querySelector(".contact-name")
-          .textContent.toLowerCase();
-        const contactEmail = item
-          .querySelector(".contact-email")
-          .textContent.toLowerCase();
-        item.style.display =
-          contactName.includes(searchTerm) || contactEmail.includes(searchTerm)
-            ? "flex"
-            : "none";
-      });
-    });
-  }
-});
-
 function startChat(userId) {
   const formData = new FormData();
   formData.append("action", "create_direct_chat");

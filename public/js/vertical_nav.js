@@ -47,26 +47,32 @@ document.addEventListener("DOMContentLoaded", function () {
               chatSidebar.dataset.originalContent = chatSidebar.innerHTML;
             }
             chatSidebar.innerHTML = html;
+
+            // Initialize contact search after loading the sidebar
+            const contactSearch = document.getElementById("contactSearch");
+            if (contactSearch) {
+              contactSearch.addEventListener("input", function (e) {
+                const searchTerm = e.target.value.toLowerCase();
+                document.querySelectorAll(".contact-item").forEach((item) => {
+                  const contactName = item
+                    .querySelector(".contact-name")
+                    .textContent.toLowerCase();
+                  const contactEmail = item
+                    .querySelector(".contact-email")
+                    .textContent.toLowerCase();
+                  item.style.display =
+                    contactName.includes(searchTerm) ||
+                    contactEmail.includes(searchTerm)
+                      ? "flex"
+                      : "none";
+                });
+              });
+            }
           }
         })
         .catch((error) => {
           alert("Error loading contacts : " + error);
         });
-
-      // Add contacts_sidebar.css to the page if not already added
-      if (!document.querySelector('link[href="css/contacts_sidebar.css"]')) {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "css/contacts_sidebar.css";
-        document.head.appendChild(link);
-      }
-
-      // Add contacts_sidebar.js to the page if not already added
-      if (!document.querySelector('script[src="js/contacts_sidebar.js"]')) {
-        const script = document.createElement("script");
-        script.src = "js/contacts_sidebar.js";
-        document.body.appendChild(script);
-      }
     });
   }
 
