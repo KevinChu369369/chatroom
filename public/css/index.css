@@ -427,3 +427,14 @@
     justify-content: center;
     height: 100%;
 }
+
+.loading-messages {
+    text-align: center;
+}
+
+.loading-messages .spinner-border {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-width: 0.2em;
+    color: var(--app-primary, #0d6efd);
+}

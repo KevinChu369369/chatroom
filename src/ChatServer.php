@@ -125,6 +125,9 @@ class ChatServer
                 case 'update_chatroom_list':
                     $this->handleUpdateChatroomList($server, $frame->fd, $data);
                     break;
+                case 'load_older_messages':
+                    $this->handleLoadOlderMessages($server, $frame->fd, $data);
+                    break;
                 default:
                     $this->sendToClient($server, $frame->fd, [
                         'type' => 'error',
@@ -639,6 +642,65 @@ class ChatServer
         $this->sendToClient($server, $fd, [
             'type' => 'update_chatroom_list',
             'chatrooms' => $chatrooms
+        ]);
+    }
+
+    private function handleLoadOlderMessages($server, $fd, $data)
+    {
+        if (!isset($data['chatroom_id']) || !isset($data['oldest_message_id'])) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Chatroom ID and oldest message ID are required'
+            ]);
+            return;
+        }
+
+        $chatroom_id = $data['chatroom_id'];
+        $oldest_message_id = $data['oldest_message_id'];
+        $user_id = $this->getUserIdByFd($fd);
+
+        // Check if user is a member of the chatroom
+        if (!$this->isUserInChatroom($user_id, $chatroom_id)) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'You are not a member of this chatroom'
+            ]);
+            return;
+        }
+
+        // Get older messages in chronological order
+        $stmt = $this->db->prepare("
+            SELECT m.*, u.username
+            FROM messages m
+            JOIN users u ON m.user_id = u.id
+            LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+            WHERE m.chatroom_id = ? AND m.id < ?
+            AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+            ORDER BY m.created_at ASC
+            LIMIT 50
+        ");
+        $stmt->bind_param("iii", $user_id, $chatroom_id, $oldest_message_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $messages = [];
+        while ($row = $result->fetch_assoc()) {
+            $messages[] = [
+                'id' => $row['id'],
+                'chatroom_id' => $row['chatroom_id'],
+                'user_id' => $row['user_id'],
+                'username' => $row['username'],
+                'content' => $row['content'],
+                'created_at' => date('Y-m-d H:i:s', strtotime($row['created_at'])),
+                'is_unread' => false // Older messages are always read
+            ];
+        }
+
+        $this->sendToClient($server, $fd, [
+            'type' => 'older_messages',
+            'chatroom_id' => $chatroom_id,
+            'messages' => $messages, // Messages are already in chronological order
+            'has_more' => count($messages) === 50 // If we got 50 messages, there might be more
         ]);
     }
 

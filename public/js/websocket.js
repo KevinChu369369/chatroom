@@ -11,9 +11,12 @@ class ChatWebSocket {
     this.pending_requests = [];
     this.last_date = "";
     this.last_message_id = 0;
+    this.oldest_message_id = Infinity;
+    this.is_loading_messages = false;
+    this.has_more_messages = true;
     this.sync_interval = null;
-    this.scrollListener = null;
-    this.markReadTimeout = null;
+    this.scroll_listener = null;
+    this.mark_read_timeout = null;
   }
 
   async connect() {
@@ -213,6 +216,10 @@ class ChatWebSocket {
                 });
               }
               break;
+
+            case "older_messages":
+              this.handleOlderMessages(data);
+              break;
           }
         } catch (error) {}
       };
@@ -239,12 +246,29 @@ class ChatWebSocket {
   }
 
   joinChatroom(chatroom_id) {
+    // Remove scroll listener from previous chatroom
+    this.removeScrollListener();
+
+    // Reset message tracking variables
+    this.last_message_id = 0;
+    this.oldest_message_id = Infinity;
+    this.is_loading_messages = false;
+    this.has_more_messages = true;
+    this.last_date = "";
+
+    // Clear any existing messages
+    const messagesDiv = document.getElementById("messages");
+    if (messagesDiv) {
+      messagesDiv.innerHTML = "";
+    }
+
     this.current_chatroom_id = chatroom_id;
     this.send({
       type: "join",
       chatroom_id: chatroom_id,
       user_id: this.user_id,
     });
+
     // Request initial message history
     this.requestMessageHistory(chatroom_id);
   }
@@ -255,7 +279,14 @@ class ChatWebSocket {
       chatroom_id: chatroom_id,
       user_id: this.user_id,
     });
+
+    // Reset all chat-related variables
     this.current_chatroom_id = null;
+    this.last_message_id = 0;
+    this.oldest_message_id = Infinity;
+    this.is_loading_messages = false;
+    this.has_more_messages = true;
+    this.last_date = "";
 
     // Remove scroll listener
     this.removeScrollListener();
@@ -318,62 +349,22 @@ class ChatWebSocket {
     if (!messagesDiv) {
       return;
     }
-    const messageDate = new Date(message.created_at).toLocaleDateString();
 
-    if (messageDate !== this.last_date) {
+    const messageDate = new Date(message.created_at);
+    const messageDateStr = messageDate.toLocaleDateString();
+
+    if (messageDateStr !== this.last_date) {
       const dateSeparator = document.createElement("div");
       dateSeparator.className = "date-separator";
       const dateSpan = document.createElement("span");
-      dateSpan.textContent = messageDate;
+      dateSpan.textContent = messageDateStr;
       dateSeparator.appendChild(dateSpan);
       messagesDiv.appendChild(dateSeparator);
-      this.last_date = messageDate;
+      this.last_date = messageDateStr;
     }
 
-    const messageDiv = document.createElement("div");
-    messageDiv.className = `message ${
-      message.user_id === this.user_id ? "sent" : "received"
-    }`;
-    messageDiv.dataset.messageId = message.id;
-
-    // Add unread indicator class if message is unread
-    if (message.is_unread) {
-      messageDiv.classList.add("unread-message");
-    }
-
-    const headerDiv = document.createElement("div");
-    headerDiv.className =
-      "d-flex justify-content-between align-items-center mb-1";
-
-    const starButton = document.createElement("button");
-    starButton.className = "btn btn-sm star-btn";
-    starButton.innerHTML = '<i class="bi bi-star"></i>';
-    starButton.onclick = (e) => {
-      e.stopPropagation();
-      this.toggleStar(message.id, starButton);
-    };
-
-    headerDiv.appendChild(starButton);
-
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "content";
-
-    contentDiv.textContent = message.content;
-
-    const timestampDiv = document.createElement("div");
-    timestampDiv.className = "timestamp";
-    // Convert UTC time to local time
-    const messageTime = new Date(message.created_at);
-    timestampDiv.textContent = messageTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    messageDiv.appendChild(headerDiv);
-    messageDiv.appendChild(contentDiv);
-    messageDiv.appendChild(timestampDiv);
-
+    const messageDiv = this.createMessageElement(message);
+    messageDiv.dataset.date = message.created_at; // Store the date for future reference
     messagesDiv.appendChild(messageDiv);
 
     // Only auto-scroll if we're already at the bottom or if it's our own message
@@ -506,43 +497,169 @@ class ChatWebSocket {
   }
 
   addScrollListener() {
-    const messagesDiv = document.getElementById("messages");
-    if (messagesDiv && !this.scrollListener) {
-      this.scrollListener = () => {
-        // Check if user has scrolled near the bottom
-        const scrollTop = messagesDiv.scrollTop;
-        const scrollHeight = messagesDiv.scrollHeight;
-        const clientHeight = messagesDiv.clientHeight;
+    const messages_div = document.getElementById("messages");
+    if (messages_div && !this.scroll_listener) {
+      this.scroll_listener = () => {
+        const scroll_top = messages_div.scrollTop;
+        const scroll_height = messages_div.scrollHeight;
+        const client_height = messages_div.clientHeight;
 
         // If user scrolled within 100px of bottom, mark messages as read
-        if (scrollHeight - scrollTop - clientHeight < 100) {
+        if (scroll_height - scroll_top - client_height < 100) {
           this.markMessagesAsReadAfterScroll();
+        }
+
+        // If user scrolled to top and we have more messages to load
+        if (
+          scroll_top < 50 &&
+          !this.is_loading_messages &&
+          this.has_more_messages
+        ) {
+          this.loadOlderMessages();
         }
       };
 
-      messagesDiv.addEventListener("scroll", this.scrollListener);
+      messages_div.addEventListener("scroll", this.scroll_listener);
     }
   }
 
   removeScrollListener() {
     const messagesDiv = document.getElementById("messages");
-    if (messagesDiv && this.scrollListener) {
-      messagesDiv.removeEventListener("scroll", this.scrollListener);
-      this.scrollListener = null;
+    if (messagesDiv && this.scroll_listener) {
+      messagesDiv.removeEventListener("scroll", this.scroll_listener);
+      this.scroll_listener = null;
+
+      // Also remove any loading indicators that might be present
+      const loadingDiv = messagesDiv.querySelector(".loading-messages");
+      if (loadingDiv) {
+        loadingDiv.remove();
+      }
     }
   }
 
   markMessagesAsReadAfterScroll() {
     // Debounce the marking to avoid too many requests
-    if (this.markReadTimeout) {
-      clearTimeout(this.markReadTimeout);
+    if (this.mark_read_timeout) {
+      clearTimeout(this.mark_read_timeout);
     }
 
-    this.markReadTimeout = setTimeout(() => {
+    this.mark_read_timeout = setTimeout(() => {
       if (this.current_chatroom_id) {
         this.markMessagesAsRead(this.current_chatroom_id);
       }
     }, 1000);
+  }
+
+  loadOlderMessages() {
+    if (
+      !this.current_chatroom_id ||
+      this.is_loading_messages ||
+      !this.has_more_messages
+    ) {
+      return;
+    }
+
+    this.is_loading_messages = true;
+
+    // Show loading indicator
+    const messages_div = document.getElementById("messages");
+    if (!messages_div) {
+      this.is_loading_messages = false;
+      return;
+    }
+
+    const loading_div = document.createElement("div");
+    loading_div.className = "loading-messages";
+    loading_div.innerHTML = `
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    `;
+    messages_div.insertBefore(loading_div, messages_div.firstChild);
+
+    this.send({
+      type: "load_older_messages",
+      chatroom_id: this.current_chatroom_id,
+      oldest_message_id: this.oldest_message_id,
+    });
+  }
+
+  handleOlderMessages(data) {
+    const messages_div = document.getElementById("messages");
+    if (!messages_div) return;
+
+    // Remove loading indicator
+    const loading_div = messages_div.querySelector(".loading-messages");
+    if (loading_div) {
+      loading_div.remove();
+    }
+
+    if (data.messages && data.messages.length > 0) {
+      // Store current scroll position and height
+      const old_scroll_height = messages_div.scrollHeight;
+      const old_scroll_top = messages_div.scrollTop;
+
+      // Update oldest message ID
+      const new_oldest_id = Math.min(...data.messages.map((m) => m.id));
+      if (new_oldest_id < this.oldest_message_id) {
+        this.oldest_message_id = new_oldest_id;
+      }
+
+      // Store the first existing message's date for comparison
+      const first_existing_message = messages_div.querySelector(".message");
+      const first_existing_date = first_existing_message
+        ? new Date(first_existing_message.dataset.date).toLocaleDateString()
+        : null;
+
+      // Create a document fragment to hold new messages
+      const fragment = document.createDocumentFragment();
+      let current_date = "";
+
+      // Process messages in chronological order
+      data.messages.forEach((message) => {
+        const message_date = new Date(message.created_at);
+        const message_date_str = message_date.toLocaleDateString();
+
+        // Only add date separator if it's a new date
+        if (message_date_str !== current_date) {
+          // Don't add a date separator if this date already exists at the top
+          if (
+            message_date_str !== first_existing_date ||
+            !first_existing_message
+          ) {
+            const date_separator = document.createElement("div");
+            date_separator.className = "date-separator";
+            const date_span = document.createElement("span");
+            date_span.textContent = message_date_str;
+            date_separator.appendChild(date_span);
+            fragment.appendChild(date_separator);
+          }
+          current_date = message_date_str;
+        }
+
+        const message_div = this.createMessageElement(message);
+        message_div.dataset.date = message.created_at;
+        fragment.appendChild(message_div);
+      });
+
+      // Insert all new messages at once
+      if (messages_div.firstChild) {
+        messages_div.insertBefore(fragment, messages_div.firstChild);
+      } else {
+        messages_div.appendChild(fragment);
+      }
+
+      // Maintain scroll position after adding new content
+      // Example: If old height was 1000px and new height is 1200px,
+      // and user was scrolled to position 500px,
+      // we need to set scroll position to 700px (500 + (1200 - 1000))
+      const new_scroll_height = messages_div.scrollHeight;
+      const height_difference = new_scroll_height - old_scroll_height;
+      messages_div.scrollTop = old_scroll_top + height_difference;
+    }
+
+    this.has_more_messages = data.has_more;
+    this.is_loading_messages = false;
   }
 
   handleHistory(data) {
@@ -556,15 +673,30 @@ class ChatWebSocket {
         messagesDiv.innerHTML = "";
       }
 
-      // Update last_message_id from history
+      // Reset message tracking variables
+      this.last_message_id = 0;
+      this.oldest_message_id = Infinity;
+      this.has_more_messages = true;
+      this.last_date = "";
+      this.is_loading_messages = false;
+
+      // Update last_message_id and oldest_message_id from history
       if (data.messages.length > 0) {
         this.last_message_id = Math.max(...data.messages.map((m) => m.id));
+        this.oldest_message_id = Math.min(...data.messages.map((m) => m.id));
+        // Set has_more_messages based on the number of messages received
+        this.has_more_messages = data.messages.length >= 50;
+      } else {
+        this.has_more_messages = false;
       }
 
       // Store the oldest unread message ID for scrolling
       let oldestUnreadElement = null;
       let hasUnreadMessages = false;
       let unreadCount = 0;
+
+      // Remove any existing scroll listener before adding a new one
+      this.removeScrollListener();
 
       // Append each message from the history
       data.messages.forEach((message) => {
@@ -579,6 +711,9 @@ class ChatWebSocket {
           }
         }
       });
+
+      // Add scroll listener for infinite scrolling
+      this.addScrollListener();
 
       // Only scroll to unread messages if there are actually unread messages
       if (hasUnreadMessages && oldestUnreadElement) {
@@ -607,5 +742,52 @@ class ChatWebSocket {
         this.markMessagesAsRead(data.chatroom_id);
       }, 1000);
     }
+  }
+
+  // Helper method to create message element
+  createMessageElement(message) {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${
+      message.user_id === this.user_id ? "sent" : "received"
+    }`;
+    messageDiv.dataset.messageId = message.id;
+
+    const headerDiv = document.createElement("div");
+    headerDiv.className =
+      "d-flex justify-content-between align-items-center mb-1";
+
+    const starButton = document.createElement("button");
+    starButton.className = "btn btn-sm star-btn";
+    starButton.innerHTML = '<i class="bi bi-star"></i>';
+    starButton.onclick = (e) => {
+      e.stopPropagation();
+      this.toggleStar(message.id, starButton);
+    };
+
+    headerDiv.appendChild(starButton);
+
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "content";
+
+    contentDiv.textContent = message.content;
+
+    const timestampDiv = document.createElement("div");
+    timestampDiv.className = "timestamp";
+    // Convert UTC time to local time
+    const messageTime = new Date(message.created_at);
+    timestampDiv.textContent = messageTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    messageDiv.appendChild(headerDiv);
+    messageDiv.appendChild(contentDiv);
+    messageDiv.appendChild(timestampDiv);
+
+    // Check if message is starred
+    this.checkStarStatus(message.id);
+
+    return messageDiv;
   }
 }
