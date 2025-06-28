@@ -1,36 +1,34 @@
 function startChat(userId) {
-  const formData = new FormData();
-  formData.append("action", "create_direct_chat");
-  formData.append("user_id", userId);
+  const form_data = new FormData();
+  form_data.append("action", "create_direct_chat");
+  form_data.append("user_id", userId);
 
   fetch("api/chatroom_actions.php", {
     method: "POST",
-    body: formData,
+    body: form_data,
   })
     .then((response) => response.json())
     .then((data) => {
-      console.log("startChat data", data);
       if (data.success && data.chatroom) {
         // Switch back to chats view
-        const chatsBtn = document.querySelector("#chats-menu-btn");
-        if (chatsBtn) {
+        const chats_btn = document.querySelector("#chats-menu-btn");
+        if (chats_btn) {
           // Store the chatroom data to be used after view switch
-          window.pendingChatroom = data.chatroom;
-          chatsBtn.click();
+          window.pending_chat_room = data.chatroom;
+          chats_btn.click();
 
           // Add a small delay to ensure the chat view is loaded
           setTimeout(() => {
             // Find the chatroom item
-            const chatroomId = data.chatroom.id;
-            if (chatroomId) {
-              const chatroomItem = document.querySelector(
-                `[data-chatroom-id="${chatroomId}"]`
+            const chatroom_id = data.chatroom.id;
+            if (chatroom_id) {
+              const chat_room_item = document.querySelector(
+                `[data-chatroom-id="${chatroom_id}"]`
               );
-              if (chatroomItem) {
-                console.log("chatroomItem click", chatroomItem);
+              if (chat_room_item) {
                 // Trigger the click event
-                const clickEvent = new Event("click", { bubbles: true });
-                chatroomItem.dispatchEvent(clickEvent);
+                const click_event = new Event("click", { bubbles: true });
+                chat_room_item.dispatchEvent(click_event);
               }
             }
           }, 300); // Increased delay to ensure DOM is ready
@@ -47,26 +45,26 @@ function startChat(userId) {
 
 function createGroup() {
   const form = document.getElementById("createGroupForm");
-  const formData = new FormData(form);
-  formData.append("action", "create_group");
+  const form_data = new FormData(form);
+  form_data.append("action", "create_group");
 
   // Validate group name
-  const groupName = formData.get("group_name").trim();
-  if (!groupName) {
+  const group_name = form_data.get("group_name").trim();
+  if (!group_name) {
     showError("Group name is required");
     return;
   }
 
   // Validate member selection
-  const selectedMembers = formData.getAll("members[]");
-  if (selectedMembers.length === 0) {
+  const selected_members = form_data.getAll("members[]");
+  if (selected_members.length === 0) {
     showError("Please select at least one member");
     return;
   }
 
   fetch("api/chatroom_actions.php", {
     method: "POST",
-    body: formData,
+    body: form_data,
   })
     .then((response) => response.json())
     .then((data) => {

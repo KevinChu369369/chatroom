@@ -178,48 +178,48 @@ function get_initials($name)
     <script src="js/websocket.js"></script>
     <script src="js/contacts_sidebar.js"></script>
     <script>
-        let currentRoom = 0;
-        let currentUser = '<?php echo $_SESSION['username']; ?>';
-        let isGroup = false;
-        let chatWebSocket;
-        let lastMessageId = 0;
-        let lastDate = '';
+        let chat_ws;
+        let current_room = 0;
+        let current_user = '<?php echo $_SESSION['username']; ?>';
+        let is_group = false;
+        let last_message_id = 0;
+        let last_date = '';
 
         function loadChatroom(chatroom_id) {
-            currentRoom = chatroom_id;
+            current_room = chatroom_id;
 
             // Join the chatroom via WebSocket
-            if (chatWebSocket && chatWebSocket.is_connected) {
-                chatWebSocket.joinChatroom(chatroom_id);
+            if (chat_ws && chat_ws.is_connected) {
+                chat_ws.joinChatroom(chatroom_id);
             } else {
-                chatWebSocket.requestMessageHistory(chatroom_id);
+                chat_ws.requestMessageHistory(chatroom_id);
             }
         }
 
         // Function to generate chat interface
-        function generateChatInterface(roomData) {
+        function generateChatInterface(room_data) {
             return `
                 <div class="chat-header">
                     <div class="user-avatar">
-                        ${getInitials(roomData.name)}
+                        ${getInitials(room_data.name)}
                     </div>
                     <div class="flex-grow-1">
-                        <h5 class="mb-0 room-name-header">${roomData.name}</h5>
-                        ${roomData.is_group ? `
+                        <h5 class="mb-0 room-name-header">${room_data.name}</h5>
+                        ${room_data.is_group ? `
                             <small class="text-muted">
-                                ${roomData.member_count} members • Created by ${roomData.creator_name}
+                                ${room_data.member_count} members • Created by ${room_data.creator_name}
                             </small>
                         ` : ''}
                     </div>
                     <div class="d-flex gap-3">
-                        ${!roomData.is_group ? '<div id="onlineUsers"></div>' : ''}
+                        ${!room_data.is_group ? '<div id="onlineUsers"></div>' : ''}
                         <i class="bi bi-three-dots-vertical action-icon" data-bs-toggle="dropdown"></i>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            ${roomData.is_group ? `
+                            ${room_data.is_group ? `
                                 <li><a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#membersModal">
                                         <i class="bi bi-people-fill"></i> View Members
                                     </a></li>
-                                ${roomData.is_creator ? `
+                                ${room_data.is_creator ? `
                                     <li><a class="dropdown-item" onclick="showLeaveAdminModal()">
                                             <i class="bi bi-box-arrow-right"></i> Leave as Admin
                                         </a></li>
@@ -255,8 +255,8 @@ function get_initials($name)
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize WebSocket
-            chatWebSocket = new ChatWebSocket(<?php echo $_SESSION['user_id']; ?>);
-            chatWebSocket.connect();
+            chat_ws = new WebSocketHandler(<?php echo $_SESSION['user_id']; ?>);
+            chat_ws.connect();
 
             // Make addChatroomToSidebar available globally
             window.addChatroomToSidebar = addChatroomToSidebar;
@@ -270,46 +270,46 @@ function get_initials($name)
             // Chat item click handler
             document.querySelectorAll('.chat-item').forEach(item => {
                 item.addEventListener('click', function() {
-                    const chatroomId = parseInt(this.dataset.chatroomId);
+                    const chatroom_id = parseInt(this.dataset.chatroomId);
                     document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
                     this.classList.add('active');
 
                     // Update current room and group status
-                    currentRoom = chatroomId;
-                    isGroup = this.querySelector('.chat-info').dataset.isGroup === '1';
+                    current_room = chatroom_id;
+                    is_group = this.querySelector('.chat-info').dataset.isGroup === '1';
 
                     // Get room data
-                    const roomNameSpan = this.querySelector('.chat-name span:first-child');
-                    const roomName = roomNameSpan ? roomNameSpan.textContent.trim() : '';
-                    const isGroupChat = this.querySelector('.chat-info').dataset.isGroup === '1';
+                    const room_name_span = this.querySelector('.chat-name span:first-child');
+                    const room_name = room_name_span ? room_name_span.textContent.trim() : '';
+                    const is_group_chat = this.querySelector('.chat-info').dataset.isGroup === '1';
 
                     // Hide welcome message and show chat container
                     document.getElementById('welcome-message').classList.add('d-none');
-                    const chatContainer = document.getElementById('chat-container');
-                    chatContainer.classList.remove('d-none');
+                    const chat_container = document.getElementById('chat-container');
+                    chat_container.classList.remove('d-none');
 
                     // Generate and set chat interface
-                    const roomData = {
-                        name: roomName,
-                        is_group: isGroupChat === '1',
+                    const room_data = {
+                        name: room_name,
+                        is_group: is_group_chat === '1',
                         member_count: 0,
                         creator_name: '',
                         is_creator: false
                     };
-                    chatContainer.innerHTML = generateChatInterface(roomData);
+                    chat_container.innerHTML = generateChatInterface(room_data);
 
                     // Initialize emoji picker for new chat interface
-                    const emojiButton = document.getElementById('emojiButton');
-                    if (emojiButton) {
-                        emojiButton.addEventListener('click', () => {
+                    const emoji_button = document.getElementById('emojiButton');
+                    if (emoji_button) {
+                        emoji_button.addEventListener('click', () => {
                             picker.toggle();
                         });
                     }
 
                     // Initialize message input event listener
-                    const messageInput = document.getElementById('messageInput');
-                    if (messageInput) {
-                        messageInput.addEventListener('keypress', function(e) {
+                    const message_input = document.getElementById('messageInput');
+                    if (message_input) {
+                        message_input.addEventListener('keypress', function(e) {
                             if (e.key === 'Enter') {
                                 sendMessage();
                             }
@@ -317,50 +317,50 @@ function get_initials($name)
                     }
 
                     history.pushState({
-                        chatroomId
+                        chatroom_id
                     }, '', 'index.php');
-                    lastMessageId = 0;
-                    lastDate = '';
-                    loadChatroom(chatroomId);
+                    last_message_id = 0;
+                    last_date = '';
+                    loadChatroom(chatroom_id);
                 });
             });
 
             // Search functionality
             document.getElementById('chatSearch').addEventListener('input', function(e) {
-                const searchTerm = e.target.value.toLowerCase();
+                const search_term = e.target.value.toLowerCase();
                 document.querySelectorAll('.chat-item').forEach(item => {
-                    const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
-                    item.style.display = chatName.includes(searchTerm) ? 'flex' : 'none';
+                    const chat_name = item.querySelector('.chat-name').textContent.toLowerCase();
+                    item.style.display = chat_name.includes(search_term) ? 'flex' : 'none';
                 });
             });
 
 
             // Handle browser back/forward navigation
             window.addEventListener('popstate', function(event) {
-                if (event.state && event.state.chatroomId) {
-                    const chatroomId = event.state.chatroomId;
-                    const chatItem = document.querySelector(`.chat-item[data-chatroom-id="${chatroomId}"]`);
-                    if (chatItem) {
-                        chatItem.click();
+                if (event.state && event.state.chatroom_id) {
+                    const chatroom_id = event.state.chatroom_id;
+                    const chat_item = document.querySelector(`.chat-item[data-chatroom-id="${chatroom_id}"]`);
+                    if (chat_item) {
+                        chat_item.click();
                     }
                 }
             });
 
             // Mark messages as read when entering a chatroom
-            if (currentRoom > 0) {
+            if (current_room > 0) {
                 setTimeout(() => {
-                    if (chatWebSocket && chatWebSocket.is_connected) {
-                        chatWebSocket.send({
+                    if (chat_ws && chat_ws.is_connected) {
+                        chat_ws.send({
                             type: "mark_messages_as_read",
-                            chatroom_id: currentRoom
+                            chatroom_id: current_room
                         });
                     }
                 }, 2000);
             }
         });
 
-        function formatDate(dateStr) {
-            const date = new Date(dateStr);
+        function formatDate(date_str) {
+            const date = new Date(date_str);
             const today = new Date();
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
@@ -375,25 +375,25 @@ function get_initials($name)
         }
 
         function sendMessage() {
-            const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value.trim();
+            const message_input = document.getElementById('messageInput');
+            const message = message_input.value.trim();
 
-            if (message && currentRoom) {
-                chatWebSocket.sendMessage(message);
-                messageInput.value = '';
+            if (message && current_room) {
+                chat_ws.sendMessage(message);
+                message_input.value = '';
             }
         }
 
-        function toggleStar(messageId, button) {
-            const isCurrentlyStarred = button.querySelector('i').classList.contains('bi-star-fill');
-            const action = isCurrentlyStarred ? 'unstar' : 'star';
+        function toggleStar(message_id, button) {
+            const is_currently_starred = button.querySelector('i').classList.contains('bi-star-fill');
+            const action = is_currently_starred ? 'unstar' : 'star';
 
             fetch('api/star_message.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `message_id=${messageId}&action=${action}`
+                    body: `message_id=${message_id}&action=${action}`
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -407,7 +407,7 @@ function get_initials($name)
         }
 
         function deleteChatroom() {
-            if (!currentRoom) {
+            if (!current_room) {
                 alert('Please select a chatroom first');
                 return;
             }
@@ -419,18 +419,18 @@ function get_initials($name)
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: `chatroom_id=${currentRoom}`
+                        body: `chatroom_id=${current_room}`
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
                             // Remove the chatroom from the sidebar
-                            const chatroomItem = document.querySelector(`.chat-item[data-chatroom-id="${currentRoom}"]`);
-                            if (chatroomItem) {
-                                chatroomItem.remove();
+                            const chatroom_item = document.querySelector(`.chat-item[data-chatroom-id="${current_room}"]`);
+                            if (chatroom_item) {
+                                chatroom_item.remove();
                             }
                             // Reset current room and reload the page
-                            currentRoom = 0;
+                            current_room = 0;
                             window.location.href = 'index.php';
                         } else {
                             alert(data.message || 'Failed to delete chat history');
@@ -443,14 +443,14 @@ function get_initials($name)
         }
 
         function showLeaveAdminModal() {
-            if (currentRoom) {
+            if (current_room) {
                 $('#leaveAdminModal').modal('show');
             }
         }
 
         function leaveChat() {
-            if (currentRoom) {
-                window.location.href = `api/leave_chat.php?chatroom_id=${currentRoom}`;
+            if (current_room) {
+                window.location.href = `api/leave_chat.php?chatroom_id=${current_room}`;
             }
         }
 
@@ -464,31 +464,31 @@ function get_initials($name)
         }
 
         function addChatroomToSidebar(chatroom) {
-            const chatroomSelector = document.querySelector('.chat-list');
-            if (!chatroomSelector) return;
+            const chatroom_selector = document.querySelector('.chat-list');
+            if (!chatroom_selector) return;
 
             // Check if chatroom already exists
-            let existingChatroom = document.querySelector(`.chat-item[data-chatroom-id="${chatroom.id}"]`);
-            if (existingChatroom) {
+            let existing_chatroom = document.querySelector(`.chat-item[data-chatroom-id="${chatroom.id}"]`);
+            if (existing_chatroom) {
                 // Update existing chatroom
-                const previewDiv = existingChatroom.querySelector('.chat-preview');
-                if (previewDiv && chatroom.latest_message) {
-                    previewDiv.textContent = chatroom.latest_message;
+                const preview_div = existing_chatroom.querySelector('.chat-preview');
+                if (preview_div && chatroom.latest_message) {
+                    preview_div.textContent = chatroom.latest_message;
                 }
-                const unreadBadge = existingChatroom.querySelector('.unread-badge');
-                if (unreadBadge) {
-                    unreadBadge.style.display = chatroom.unread_count > 0 ? 'inline-block' : 'none';
-                    unreadBadge.textContent = chatroom.unread_count;
+                const unread_badge = existing_chatroom.querySelector('.unread-badge');
+                if (unread_badge) {
+                    unread_badge.style.display = chatroom.unread_count > 0 ? 'inline-block' : 'none';
+                    unread_badge.textContent = chatroom.unread_count;
                 }
                 return;
             }
 
-            const chatroomItem = document.createElement('div');
-            chatroomItem.className = 'chat-item';
-            chatroomItem.dataset.chatroomId = chatroom.id;
-            chatroomItem.dataset.isGroup = chatroom.is_group;
+            const chatroom_item = document.createElement('div');
+            chatroom_item.className = 'chat-item';
+            chatroom_item.dataset.chatroomId = chatroom.id;
+            chatroom_item.dataset.isGroup = chatroom.is_group;
 
-            chatroomItem.innerHTML = `
+            chatroom_item.innerHTML = `
                 <div class="user-avatar">
                     ${getInitials(chatroom.name)}
                 </div>
@@ -516,46 +516,46 @@ function get_initials($name)
             `;
 
             // Add click handler
-            chatroomItem.addEventListener('click', function() {
-                const chatroomId = parseInt(this.dataset.chatroomId);
+            chatroom_item.addEventListener('click', function() {
+                const chatroom_id = parseInt(this.dataset.chatroomId);
                 document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
                 this.classList.add('active');
 
-                currentRoom = chatroomId;
-                isGroup = this.querySelector('.chat-info').dataset.isGroup === '1';
+                current_room = chatroom_id;
+                is_group = this.querySelector('.chat-info').dataset.isGroup === '1';
 
                 // Get room data
-                const roomNameSpan = this.querySelector('.chat-name span:first-child');
-                const roomName = roomNameSpan ? roomNameSpan.textContent.trim() : '';
-                const isGroupChat = this.querySelector('.chat-info').dataset.isGroup === '1';
+                const room_name_span = this.querySelector('.chat-name span:first-child');
+                const room_name = room_name_span ? room_name_span.textContent.trim() : '';
+                const is_group_chat = this.querySelector('.chat-info').dataset.isGroup === '1';
 
                 // Hide welcome message and show chat container
                 document.getElementById('welcome-message').classList.add('d-none');
-                const chatContainer = document.getElementById('chat-container');
-                chatContainer.classList.remove('d-none');
+                const chat_container = document.getElementById('chat-container');
+                chat_container.classList.remove('d-none');
 
                 // Generate and set chat interface
-                const roomData = {
-                    name: roomName,
-                    is_group: isGroupChat === '1',
+                const room_data = {
+                    name: room_name,
+                    is_group: is_group_chat === '1',
                     member_count: 0,
                     creator_name: '',
                     is_creator: false
                 };
-                chatContainer.innerHTML = generateChatInterface(roomData);
+                chat_container.innerHTML = generateChatInterface(room_data);
 
                 // Initialize emoji picker for new chat interface
-                const emojiButton = document.getElementById('emojiButton');
-                if (emojiButton) {
-                    emojiButton.addEventListener('click', () => {
+                const emoji_button = document.getElementById('emojiButton');
+                if (emoji_button) {
+                    emoji_button.addEventListener('click', () => {
                         picker.toggle();
                     });
                 }
 
                 // Initialize message input event listener
-                const messageInput = document.getElementById('messageInput');
-                if (messageInput) {
-                    messageInput.addEventListener('keypress', function(e) {
+                const message_input = document.getElementById('messageInput');
+                if (message_input) {
+                    message_input.addEventListener('keypress', function(e) {
                         if (e.key === 'Enter') {
                             sendMessage();
                         }
@@ -563,21 +563,21 @@ function get_initials($name)
                 }
 
                 history.pushState({
-                    chatroomId
+                    chatroom_id
                 }, '', 'index.php');
-                lastMessageId = 0;
-                lastDate = '';
+                last_message_id = 0;
+                last_date = '';
 
                 // Use the global loadChatroom function
-                loadChatroom(chatroomId);
+                loadChatroom(chatroom_id);
             });
 
             // Insert at the beginning of the chat list
-            const firstItem = chatroomSelector.querySelector('.chat-item');
-            if (firstItem) {
-                firstItem.parentNode.insertBefore(chatroomItem, firstItem);
+            const first_item = chatroom_selector.querySelector('.chat-item');
+            if (first_item) {
+                first_item.parentNode.insertBefore(chatroom_item, first_item);
             } else {
-                chatroomSelector.appendChild(chatroomItem);
+                chatroom_selector.appendChild(chatroom_item);
             }
         }
     </script>

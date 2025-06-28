@@ -1,38 +1,38 @@
 // Handle vertical nav toggle
-const navToggle = document.querySelector(".nav-toggle");
-const verticalNav = document.querySelector(".vertical-nav");
+const nav_toggle = document.querySelector(".nav-toggle");
+const vertical_nav = document.querySelector(".vertical-nav");
 
-navToggle.addEventListener("click", function () {
-  verticalNav.classList.toggle("expanded");
+nav_toggle.addEventListener("click", function () {
+  vertical_nav.classList.toggle("expanded");
   document.querySelector(".main-layout").classList.toggle("nav-expanded");
 });
 
 // Close nav when clicking outside
 document.addEventListener("click", function (e) {
   if (
-    !verticalNav.contains(e.target) &&
-    verticalNav.classList.contains("expanded")
+    !vertical_nav.contains(e.target) &&
+    vertical_nav.classList.contains("expanded")
   ) {
-    verticalNav.classList.remove("expanded");
+    vertical_nav.classList.remove("expanded");
     document.querySelector(".main-layout").classList.remove("nav-expanded");
   }
 });
 
 // Function to set active menu item
-function setActiveMenuItem(clickedLink) {
+function setActiveMenuItem(clicked_link) {
   // Remove active class from all nav links
   document.querySelectorAll(".nav-menu .nav-link").forEach((link) => {
     link.classList.remove("active");
   });
   // Add active class to clicked link
-  clickedLink.classList.add("active");
+  clicked_link.classList.add("active");
 }
 
 // Handle contacts view
 document.addEventListener("DOMContentLoaded", function () {
-  const contactsLink = document.querySelector("#contacts-menu-btn");
-  if (contactsLink) {
-    contactsLink.addEventListener("click", function (e) {
+  const contacts_link = document.querySelector("#contacts-menu-btn");
+  if (contacts_link) {
+    contacts_link.addEventListener("click", function (e) {
       e.preventDefault();
       setActiveMenuItem(this);
 
@@ -44,29 +44,29 @@ document.addEventListener("DOMContentLoaded", function () {
       })
         .then((response) => response.text())
         .then((html) => {
-          const chatSidebar = document.querySelector(".chat-sidebar");
-          if (chatSidebar) {
+          const chat_side_bar = document.querySelector(".chat-sidebar");
+          if (chat_side_bar) {
             // Store the current sidebar content
-            if (!chatSidebar.dataset.originalContent) {
-              chatSidebar.dataset.originalContent = chatSidebar.innerHTML;
+            if (!chat_side_bar.dataset.originalContent) {
+              chat_side_bar.dataset.originalContent = chat_side_bar.innerHTML;
             }
-            chatSidebar.innerHTML = html;
+            chat_side_bar.innerHTML = html;
 
             // Initialize contact search after loading the sidebar
-            const contactSearch = document.getElementById("contactSearch");
-            if (contactSearch) {
-              contactSearch.addEventListener("input", function (e) {
-                const searchTerm = e.target.value.toLowerCase();
+            const contact_search = document.getElementById("contactSearch");
+            if (contact_search) {
+              contact_search.addEventListener("input", function (e) {
+                const search_term = e.target.value.toLowerCase();
                 document.querySelectorAll(".contact-item").forEach((item) => {
-                  const contactName = item
+                  const contact_name = item
                     .querySelector(".contact-name")
                     .textContent.toLowerCase();
-                  const contactEmail = item
+                  const contact_email = item
                     .querySelector(".contact-email")
                     .textContent.toLowerCase();
                   item.style.display =
-                    contactName.includes(searchTerm) ||
-                    contactEmail.includes(searchTerm)
+                    contact_name.includes(search_term) ||
+                    contact_email.includes(search_term)
                       ? "flex"
                       : "none";
                 });
@@ -81,67 +81,66 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Add click handler for chats link to restore original sidebar
-  const chatsLink = document.querySelector("#chats-menu-btn");
-  if (chatsLink) {
-    chatsLink.addEventListener("click", function (e) {
+  const chats_link = document.querySelector("#chats-menu-btn");
+  if (chats_link) {
+    chats_link.addEventListener("click", function (e) {
       e.preventDefault();
       setActiveMenuItem(this);
 
-      const chatSidebar = document.querySelector(".chat-sidebar");
-      if (chatSidebar && chatSidebar.dataset.originalContent) {
-        chatSidebar.innerHTML = chatSidebar.dataset.originalContent;
+      const chat_side_bar = document.querySelector(".chat-sidebar");
+      if (chat_side_bar && chat_side_bar.dataset.originalContent) {
+        chat_side_bar.innerHTML = chat_side_bar.dataset.originalContent;
 
         // Re-attach click handlers to all chat items
         document.querySelectorAll(".chat-item").forEach((item) => {
           item.addEventListener("click", function () {
-            const chatroomId = parseInt(this.dataset.chatroomId);
+            const chatroom_id = parseInt(this.dataset.chatroomId);
             document
               .querySelectorAll(".chat-item")
               .forEach((i) => i.classList.remove("active"));
             this.classList.add("active");
 
-            // Update current room and group status
-            window.currentRoom = chatroomId;
-            window.isGroup =
-              this.querySelector(".chat-info").dataset.isGroup === "1";
+            // Update current room and group status. variable is used in index.php
+            current_room = chatroom_id;
+            is_group = this.querySelector(".chat-info").dataset.isGroup === "1";
 
             // Get room data
-            const roomNameSpan = this.querySelector(
+            const room_name_span = this.querySelector(
               ".chat-name span:first-child"
             );
-            const roomName = roomNameSpan
-              ? roomNameSpan.textContent.trim()
+            const room_name = room_name_span
+              ? room_name_span.textContent.trim()
               : "";
-            const isGroupChat =
+            const is_group_chat =
               this.querySelector(".chat-info").dataset.isGroup === "1";
 
             // Hide welcome message and show chat container
             document.getElementById("welcome-message").classList.add("d-none");
-            const chatContainer = document.getElementById("chat-container");
-            chatContainer.classList.remove("d-none");
+            const chat_container = document.getElementById("chat-container");
+            chat_container.classList.remove("d-none");
 
             // Generate and set chat interface
-            const roomData = {
-              name: roomName,
-              is_group: isGroupChat === "1",
+            const room_data = {
+              name: room_name,
+              is_group: is_group_chat === "1",
               member_count: 0,
               creator_name: "",
               is_creator: false,
             };
-            chatContainer.innerHTML = window.generateChatInterface(roomData);
+            chat_container.innerHTML = window.generateChatInterface(room_data);
 
             // Initialize emoji picker for new chat interface
-            const emojiButton = document.getElementById("emojiButton");
-            if (emojiButton) {
-              emojiButton.addEventListener("click", () => {
+            const emoji_button = document.getElementById("emojiButton");
+            if (emoji_button) {
+              emoji_button.addEventListener("click", () => {
                 window.picker.toggle();
               });
             }
 
             // Initialize message input event listener
-            const messageInput = document.getElementById("messageInput");
-            if (messageInput) {
-              messageInput.addEventListener("keypress", function (e) {
+            const message_input = document.getElementById("messageInput");
+            if (message_input) {
+              message_input.addEventListener("keypress", function (e) {
                 if (e.key === "Enter") {
                   window.sendMessage();
                 }
@@ -150,34 +149,38 @@ document.addEventListener("DOMContentLoaded", function () {
 
             history.pushState(
               {
-                chatroomId,
+                chatroom_id,
               },
               "",
               "index.php"
             );
-            window.lastMessageId = 0;
-            window.lastDate = "";
-            window.loadChatroom(chatroomId);
+
+            // Reset message tracking variables. variables are used in index.php
+            last_message_id = 0;
+            last_date = "";
+
+            // Load chatroom
+            loadChatroom(chatroom_id);
           });
         });
 
         // If there's a pending chatroom from contacts view, handle it
-        if (window.pendingChatroom) {
-          const chatroomId = window.pendingChatroom.id;
+        if (window.pending_chat_room) {
+          const chatroom_id = window.pending_chat_room.id;
           // Add the chatroom to sidebar if it doesn't exist
-          if (!document.querySelector(`[data-chatroom-id="${chatroomId}"]`)) {
-            window.addChatroomToSidebar(window.pendingChatroom);
+          if (!document.querySelector(`[data-chatroom-id="${chatroom_id}"]`)) {
+            window.addChatroomToSidebar(window.pending_chat_room);
           }
           // Find and click the chatroom
-          const chatroomItem = document.querySelector(
-            `[data-chatroom-id="${chatroomId}"]`
+          const chatroom_item = document.querySelector(
+            `[data-chatroom-id="${chatroom_id}"]`
           );
-          if (chatroomItem) {
-            const clickEvent = new Event("click", { bubbles: true });
-            chatroomItem.dispatchEvent(clickEvent);
+          if (chatroom_item) {
+            const click_event = new Event("click", { bubbles: true });
+            chatroom_item.dispatchEvent(click_event);
           }
           // Clear the pending chatroom
-          delete window.pendingChatroom;
+          delete window.pending_chat_room;
         }
       }
     });

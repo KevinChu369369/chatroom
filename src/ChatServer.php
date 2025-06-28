@@ -15,7 +15,7 @@ class ChatServer
     public function __construct()
     {
         try {
-            global $host, $username, $password, $dbname;
+            global $host, $username, $password, $db_name;
 
             $this->user_connections = [];
             $this->last_ping = [];
@@ -25,7 +25,7 @@ class ChatServer
             date_default_timezone_set('Asia/Hong_Kong');
 
             // Add error handling for database connection
-            $this->db = new mysqli($host, $username, $password, $dbname);
+            $this->db = new mysqli($host, $username, $password, $db_name);
             if ($this->db->connect_error) {
                 throw new Exception("Database connection failed: " . $this->db->connect_error);
             }
@@ -252,7 +252,6 @@ class ChatServer
         }
 
         $chatroom_id = $data['chatroom_id'];
-        $user_id = $this->getUserIdByFd($fd);
 
         $this->sendToClient($server, $fd, [
             'type' => 'leave',
@@ -720,11 +719,11 @@ class ChatServer
     private function sendToClient($server, $fd, $message)
     {
         try {
-            $jsonMessage = json_encode($message);
-            if ($jsonMessage === false) {
+            $json_message = json_encode($message);
+            if ($json_message === false) {
                 return;
             }
-            $server->push($fd, $jsonMessage);
+            $server->push($fd, $json_message);
         } catch (\Exception $e) {
             echo date('Y-m-d H:i:s') . " Error sending message: " . $e->getMessage() . "\n";
         }
@@ -744,12 +743,12 @@ class ChatServer
 try {
     $server = new Swoole\WebSocket\Server("0.0.0.0", 9501);
 
-    $chatServer = new ChatServer();
+    $chat_server = new ChatServer();
 
-    $server->on('Start', [$chatServer, 'onStart']);
-    $server->on('Open', [$chatServer, 'onOpen']);
-    $server->on('Message', [$chatServer, 'onMessage']);
-    $server->on('Close', [$chatServer, 'onClose']);
+    $server->on('Start', [$chat_server, 'onStart']);
+    $server->on('Open', [$chat_server, 'onOpen']);
+    $server->on('Message', [$chat_server, 'onMessage']);
+    $server->on('Close', [$chat_server, 'onClose']);
 
     echo date('Y-m-d H:i:s') . " Starting Swoole WebSocket Server...\n";
     $server->start();

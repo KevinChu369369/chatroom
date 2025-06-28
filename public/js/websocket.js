@@ -1,4 +1,4 @@
-class ChatWebSocket {
+class WebSocketHandler {
   constructor(user_id) {
     this.ws = null;
     this.user_id = user_id;
@@ -68,11 +68,11 @@ class ChatWebSocket {
               }
 
               // Check if the chatroom exists in the sidebar
-              const chatroomExists = document.querySelector(
+              const chatroom_exists = document.querySelector(
                 `[data-chatroom-id="${data.chatroom_id}"]`
               );
 
-              if (!chatroomExists && data.user_id !== this.user_id) {
+              if (!chatroom_exists && data.user_id !== this.user_id) {
                 // Request updated chatroom list to get the new chatroom
                 this.send({
                   type: "update_chatroom_list",
@@ -95,11 +95,11 @@ class ChatWebSocket {
                 };
                 this.appendMessage(message);
                 // Remove any existing unread separator
-                const messagesDiv = document.getElementById("messages");
-                const existingSeparator =
-                  messagesDiv.querySelector(".unread-separator");
-                if (existingSeparator) {
-                  existingSeparator.remove();
+                const messages_div = document.getElementById("messages");
+                const existing_separator =
+                  messages_div.querySelector(".unread-separator");
+                if (existing_separator) {
+                  existing_separator.remove();
                 }
 
                 // Mark messages as read immediately for current chatroom
@@ -119,7 +119,7 @@ class ChatWebSocket {
                   if (message.id > this.last_message_id) {
                     this.last_message_id = message.id;
                     if (message.chatroom_id === this.current_chatroom_id) {
-                      const formattedMessage = {
+                      const formatted_message = {
                         id: message.id,
                         user_id: message.user_id,
                         username: message.username,
@@ -127,7 +127,7 @@ class ChatWebSocket {
                         created_at: message.created_at,
                         type: "text",
                       };
-                      this.appendMessage(formattedMessage);
+                      this.appendMessage(formatted_message);
                     }
                   }
                 });
@@ -155,21 +155,21 @@ class ChatWebSocket {
                 data.chatroom_id === this.current_chatroom_id
               ) {
                 // Remove unread indicators from all messages
-                const unreadMessages =
+                const unread_messages =
                   document.querySelectorAll(".unread-message");
-                unreadMessages.forEach((msg) => {
+                unread_messages.forEach((msg) => {
                   msg.classList.remove("unread-message");
                 });
 
-                const chatroomItem = document.querySelector(
+                const chatroom_item = document.querySelector(
                   `[data-chatroom-id="${data.chatroom_id}"]`
                 );
-                if (chatroomItem) {
-                  const unreadBadge =
-                    chatroomItem.querySelector(".unread-badge");
-                  if (unreadBadge) {
-                    unreadBadge.style.display = "none";
-                    unreadBadge.textContent = "0";
+                if (chatroom_item) {
+                  const unread_badge =
+                    chatroom_item.querySelector(".unread-badge");
+                  if (unread_badge) {
+                    unread_badge.style.display = "none";
+                    unread_badge.textContent = "0";
                   }
                 }
               }
@@ -178,25 +178,25 @@ class ChatWebSocket {
             case "get_unread_counts":
               if (data.chatrooms) {
                 data.chatrooms.forEach((chatroom) => {
-                  const chatroomItem = document.querySelector(
+                  const chatroom_item = document.querySelector(
                     `[data-chatroom-id="${chatroom.id}"]`
                   );
 
                   if (chatroom.unread_count > 0) {
                     // Update existing chatroom
-                    if (chatroomItem) {
-                      const unreadBadge =
-                        chatroomItem.querySelector(".unread-badge");
-                      if (unreadBadge) {
-                        unreadBadge.textContent = chatroom.unread_count;
-                        unreadBadge.style.display = "inline";
+                    if (chatroom_item) {
+                      const unread_badge =
+                        chatroom_item.querySelector(".unread-badge");
+                      if (unread_badge) {
+                        unread_badge.textContent = chatroom.unread_count;
+                        unread_badge.style.display = "inline";
                       }
                     }
-                  } else if (chatroomItem) {
-                    const unreadBadge =
-                      chatroomItem.querySelector(".unread-badge");
-                    if (unreadBadge) {
-                      unreadBadge.style.display = "none";
+                  } else if (chatroom_item) {
+                    const unread_badge =
+                      chatroom_item.querySelector(".unread-badge");
+                    if (unread_badge) {
+                      unread_badge.style.display = "none";
                     }
                   }
                 });
@@ -206,10 +206,10 @@ class ChatWebSocket {
             case "update_chatroom_list":
               if (data.chatrooms) {
                 data.chatrooms.forEach((chatroom) => {
-                  const chatroomItem = document.querySelector(
+                  const chatroom_item = document.querySelector(
                     `[data-chatroom-id="${chatroom.id}"]`
                   );
-                  if (!chatroomItem) {
+                  if (!chatroom_item) {
                     // Add latest message to the chatroom data
                     window.addChatroomToSidebar(chatroom);
                   }
@@ -257,9 +257,9 @@ class ChatWebSocket {
     this.last_date = "";
 
     // Clear any existing messages
-    const messagesDiv = document.getElementById("messages");
-    if (messagesDiv) {
-      messagesDiv.innerHTML = "";
+    const messages_div = document.getElementById("messages");
+    if (messages_div) {
+      messages_div.innerHTML = "";
     }
 
     this.current_chatroom_id = chatroom_id;
@@ -315,8 +315,8 @@ class ChatWebSocket {
   send(data) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.is_connected) {
       try {
-        const jsonData = JSON.stringify(data);
-        this.ws.send(jsonData);
+        const json_data = JSON.stringify(data);
+        this.ws.send(json_data);
       } catch (error) {}
     } else {
       this.pending_requests.push(data);
@@ -345,56 +345,56 @@ class ChatWebSocket {
   }
 
   appendMessage(message) {
-    const messagesDiv = document.getElementById("messages");
-    if (!messagesDiv) {
+    const messages_div = document.getElementById("messages");
+    if (!messages_div) {
       return;
     }
 
-    const messageDate = new Date(message.created_at);
-    const messageDateStr = messageDate.toLocaleDateString();
+    const message_date = new Date(message.created_at);
+    const message_date_str = message_date.toLocaleDateString();
 
-    if (messageDateStr !== this.last_date) {
-      const dateSeparator = document.createElement("div");
-      dateSeparator.className = "date-separator";
-      const dateSpan = document.createElement("span");
-      dateSpan.textContent = messageDateStr;
-      dateSeparator.appendChild(dateSpan);
-      messagesDiv.appendChild(dateSeparator);
-      this.last_date = messageDateStr;
+    if (message_date_str !== this.last_date) {
+      const date_separator = document.createElement("div");
+      date_separator.className = "date-separator";
+      const date_span = document.createElement("span");
+      date_span.textContent = message_date_str;
+      date_separator.appendChild(date_span);
+      messages_div.appendChild(date_separator);
+      this.last_date = message_date_str;
     }
 
-    const messageDiv = this.createMessageElement(message);
-    messageDiv.dataset.date = message.created_at; // Store the date for future reference
-    messagesDiv.appendChild(messageDiv);
+    const created_message_div = this.createMessageElement(message);
+    created_message_div.dataset.date = message.created_at; // Store the date for future reference
+    messages_div.appendChild(created_message_div);
 
     // Only auto-scroll if we're already at the bottom or if it's our own message
-    const isAtBottom =
-      messagesDiv.scrollHeight -
-        messagesDiv.scrollTop -
-        messagesDiv.clientHeight <
+    const is_at_bottom =
+      messages_div.scrollHeight -
+        messages_div.scrollTop -
+        messages_div.clientHeight <
       100;
-    if (isAtBottom || message.user_id === this.user_id) {
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (is_at_bottom || message.user_id === this.user_id) {
+      messages_div.scrollTop = messages_div.scrollHeight;
     }
 
     // Check if message is starred
     this.checkStarStatus(message.id);
 
-    return messageDiv;
+    return created_message_div;
   }
 
-  toggleStar(messageId, button) {
-    const isCurrentlyStarred = button
+  toggleStar(message_id, button) {
+    const is_currently_starred = button
       .querySelector("i")
       .classList.contains("bi-star-fill");
-    const action = isCurrentlyStarred ? "unstar" : "star";
+    const action = is_currently_starred ? "unstar" : "star";
 
     fetch("api/star_message.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: `message_id=${messageId}&action=${action}`,
+      body: `message_id=${message_id}&action=${action}`,
     })
       .then((response) => response.json())
       .then((data) => {
@@ -407,20 +407,20 @@ class ChatWebSocket {
       });
   }
 
-  checkStarStatus(messageId) {
-    fetch(`api/star_message.php?message_id=${messageId}`)
+  checkStarStatus(message_id) {
+    fetch(`api/star_message.php?message_id=${message_id}`)
       .then((response) => response.json())
       .then((data) => {
         if (data.success) {
-          const messageDiv = document.querySelector(
-            `[data-message-id="${messageId}"]`
+          const message_div = document.querySelector(
+            `[data-message-id="${message_id}"]`
           );
-          if (messageDiv) {
-            const starButton = messageDiv.querySelector(".star-btn i");
+          if (message_div) {
+            const star_button = message_div.querySelector(".star-btn i");
             if (data.starred) {
-              starButton.classList.remove("bi-star");
-              starButton.classList.add("bi-star-fill");
-              starButton.style.color = "#ffc107";
+              star_button.classList.remove("bi-star");
+              star_button.classList.add("bi-star-fill");
+              star_button.style.color = "#ffc107";
             }
           }
         }
@@ -452,9 +452,9 @@ class ChatWebSocket {
     }
   }
 
-  addUnreadSeparator(messageElement, unreadCount) {
-    const messagesDiv = document.getElementById("messages");
-    if (!messagesDiv) {
+  addUnreadSeparator(message_element, unread_count) {
+    const messages_div = document.getElementById("messages");
+    if (!messages_div) {
       return;
     }
 
@@ -462,15 +462,15 @@ class ChatWebSocket {
     separator.className = "unread-separator";
     separator.innerHTML = `
       <div class="unread-line"></div>
-      <div class="unread-label">${unreadCount} unread message${
-      unreadCount > 1 ? "s" : ""
+      <div class="unread-label">${unread_count} unread message${
+      unread_count > 1 ? "s" : ""
     }</div>
       <div class="unread-line"></div>
     `;
 
     // Insert the separator before the first unread message
-    if (messageElement && messageElement.parentNode) {
-      messageElement.parentNode.insertBefore(separator, messageElement);
+    if (message_element && message_element.parentNode) {
+      message_element.parentNode.insertBefore(separator, message_element);
     }
 
     return separator;
@@ -484,14 +484,14 @@ class ChatWebSocket {
     });
   }
 
-  updateChatPreview(chatroomId, message) {
-    const chatroomItem = document.querySelector(
-      `.chat-item[data-chatroom-id="${chatroomId}"]`
+  updateChatPreview(chatroom_id, message) {
+    const chatroom_item = document.querySelector(
+      `.chat-item[data-chatroom-id="${chatroom_id}"]`
     );
-    if (chatroomItem) {
-      const previewDiv = chatroomItem.querySelector(".chat-preview");
-      if (previewDiv) {
-        previewDiv.textContent = message;
+    if (chatroom_item) {
+      const preview_div = chatroom_item.querySelector(".chat-preview");
+      if (preview_div) {
+        preview_div.textContent = message;
       }
     }
   }
@@ -524,13 +524,13 @@ class ChatWebSocket {
   }
 
   removeScrollListener() {
-    const messagesDiv = document.getElementById("messages");
-    if (messagesDiv && this.scroll_listener) {
-      messagesDiv.removeEventListener("scroll", this.scroll_listener);
+    const messages_div = document.getElementById("messages");
+    if (messages_div && this.scroll_listener) {
+      messages_div.removeEventListener("scroll", this.scroll_listener);
       this.scroll_listener = null;
 
       // Also remove any loading indicators that might be present
-      const loadingDiv = messagesDiv.querySelector(".loading-messages");
+      const loadingDiv = messages_div.querySelector(".loading-messages");
       if (loadingDiv) {
         loadingDiv.remove();
       }
@@ -650,9 +650,6 @@ class ChatWebSocket {
       }
 
       // Maintain scroll position after adding new content
-      // Example: If old height was 1000px and new height is 1200px,
-      // and user was scrolled to position 500px,
-      // we need to set scroll position to 700px (500 + (1200 - 1000))
       const new_scroll_height = messages_div.scrollHeight;
       const height_difference = new_scroll_height - old_scroll_height;
       messages_div.scrollTop = old_scroll_top + height_difference;
@@ -668,9 +665,9 @@ class ChatWebSocket {
       Array.isArray(data.messages)
     ) {
       // Clear existing messages first
-      const messagesDiv = document.getElementById("messages");
-      if (messagesDiv) {
-        messagesDiv.innerHTML = "";
+      const messages_div = document.getElementById("messages");
+      if (messages_div) {
+        messages_div.innerHTML = "";
       }
 
       // Reset message tracking variables
@@ -691,23 +688,23 @@ class ChatWebSocket {
       }
 
       // Store the oldest unread message ID for scrolling
-      let oldestUnreadElement = null;
-      let hasUnreadMessages = false;
-      let unreadCount = 0;
+      let oldest_unread_element = null;
+      let has_unread_messages = false;
+      let unread_count = 0;
 
       // Remove any existing scroll listener before adding a new one
       this.removeScrollListener();
 
       // Append each message from the history
       data.messages.forEach((message) => {
-        const messageElement = this.appendMessage(message);
+        const message_element = this.appendMessage(message);
 
         // Count unread messages and mark the first one
         if (message.is_unread) {
-          unreadCount++;
-          if (!oldestUnreadElement) {
-            oldestUnreadElement = messageElement;
-            hasUnreadMessages = true;
+          unread_count++;
+          if (!oldest_unread_element) {
+            oldest_unread_element = message_element;
+            has_unread_messages = true;
           }
         }
       });
@@ -716,13 +713,13 @@ class ChatWebSocket {
       this.addScrollListener();
 
       // Only scroll to unread messages if there are actually unread messages
-      if (hasUnreadMessages && oldestUnreadElement) {
+      if (has_unread_messages && oldest_unread_element) {
         // Add a visual separator before the first unread message
-        this.addUnreadSeparator(oldestUnreadElement, unreadCount);
+        this.addUnreadSeparator(oldest_unread_element, unread_count);
 
         // Scroll to the unread separator
         setTimeout(() => {
-          const separator = messagesDiv.querySelector(".unread-separator");
+          const separator = messages_div.querySelector(".unread-separator");
           if (separator) {
             separator.scrollIntoView({
               behavior: "smooth",
@@ -733,7 +730,7 @@ class ChatWebSocket {
       } else {
         // No unread messages, scroll to bottom
         setTimeout(() => {
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          messages_div.scrollTop = messages_div.scrollHeight;
         }, 100);
       }
 
@@ -746,48 +743,48 @@ class ChatWebSocket {
 
   // Helper method to create message element
   createMessageElement(message) {
-    const messageDiv = document.createElement("div");
-    messageDiv.className = `message ${
+    const message_div = document.createElement("div");
+    message_div.className = `message ${
       message.user_id === this.user_id ? "sent" : "received"
     }`;
-    messageDiv.dataset.messageId = message.id;
+    message_div.dataset.messageId = message.id;
 
-    const headerDiv = document.createElement("div");
-    headerDiv.className =
+    const header_div = document.createElement("div");
+    header_div.className =
       "d-flex justify-content-between align-items-center mb-1";
 
-    const starButton = document.createElement("button");
-    starButton.className = "btn btn-sm star-btn";
-    starButton.innerHTML = '<i class="bi bi-star"></i>';
-    starButton.onclick = (e) => {
+    const star_button = document.createElement("button");
+    star_button.className = "btn btn-sm star-btn";
+    star_button.innerHTML = '<i class="bi bi-star"></i>';
+    star_button.onclick = (e) => {
       e.stopPropagation();
-      this.toggleStar(message.id, starButton);
+      this.toggleStar(message.id, star_button);
     };
 
-    headerDiv.appendChild(starButton);
+    header_div.appendChild(star_button);
 
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "content";
+    const content_div = document.createElement("div");
+    content_div.className = "content";
 
-    contentDiv.textContent = message.content;
+    content_div.textContent = message.content;
 
-    const timestampDiv = document.createElement("div");
-    timestampDiv.className = "timestamp";
+    const timestamp_div = document.createElement("div");
+    timestamp_div.className = "timestamp";
     // Convert UTC time to local time
-    const messageTime = new Date(message.created_at);
-    timestampDiv.textContent = messageTime.toLocaleTimeString("en-US", {
+    const message_time = new Date(message.created_at);
+    timestamp_div.textContent = message_time.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
 
-    messageDiv.appendChild(headerDiv);
-    messageDiv.appendChild(contentDiv);
-    messageDiv.appendChild(timestampDiv);
+    message_div.appendChild(header_div);
+    message_div.appendChild(content_div);
+    message_div.appendChild(timestamp_div);
 
     // Check if message is starred
     this.checkStarStatus(message.id);
 
-    return messageDiv;
+    return message_div;
   }
 }

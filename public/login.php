@@ -89,28 +89,28 @@ if (isset($_SESSION['user_id'])) {
     <script>
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const formData = new FormData();
-            formData.append('action', 'login');
-            formData.append('username', this.username.value);
-            formData.append('password', this.password.value);
+            const form_data = new FormData();
+            form_data.append('action', 'login');
+            form_data.append('username', this.username.value);
+            form_data.append('password', this.password.value);
 
             fetch('auth.php', {
                     method: 'POST',
-                    body: formData
+                    body: form_data
                 })
                 .then(response => response.json())
                 .then(data => {
-                    const messageDiv = document.querySelector('.form-message');
-                    messageDiv.style.display = 'block';
+                    const message_div = document.querySelector('.form-message');
+                    message_div.style.display = 'block';
 
                     if (data.success) {
-                        messageDiv.className = 'form-message success';
-                        messageDiv.textContent = 'Login successful!';
+                        message_div.className = 'form-message success';
+                        message_div.textContent = 'Login successful!';
                         localStorage.setItem('chatUsername', data.username);
                         window.location.href = 'index.php';
                     } else {
-                        messageDiv.className = 'form-message error';
-                        messageDiv.textContent = data.message;
+                        message_div.className = 'form-message error';
+                        message_div.textContent = data.message;
                     }
                 });
         });
