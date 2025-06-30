@@ -384,28 +384,6 @@ function get_initials($name)
             }
         }
 
-        function toggleStar(message_id, button) {
-            const is_currently_starred = button.querySelector('i').classList.contains('bi-star-fill');
-            const action = is_currently_starred ? 'unstar' : 'star';
-
-            fetch('api/star_message.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: `message_id=${message_id}&action=${action}`
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const icon = button.querySelector('i');
-                        icon.classList.toggle('bi-star');
-                        icon.classList.toggle('bi-star-fill');
-                        icon.style.color = data.starred ? '#ffc107' : '#000';
-                    }
-                });
-        }
-
         function deleteChatroom() {
             if (!current_room) {
                 alert('Please select a chatroom first');
