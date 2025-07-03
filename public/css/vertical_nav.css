@@ -139,3 +139,21 @@
         margin-left: 0;
     }
 }
+
+.nav-link[data-bs-toggle="modal"] {
+    transition: color 0.2s;
+}
+
+.nav-link[data-bs-toggle="modal"]:focus {
+    color: var(--app-text);
+}
+
+.nav-link[data-bs-toggle="modal"]:hover {
+    color: var(--app-primary);
+}
+
+/* Remove outline on click */
+.nav-link[data-bs-toggle="modal"]:focus-visible {
+    outline: none;
+    box-shadow: none;
+}

@@ -179,6 +179,7 @@
     position: relative;
     margin-bottom: 15px;
     clear: both;
+    margin-right: 15px;
 }
 
 .message.sent {
@@ -218,8 +219,8 @@
 
 .message .star-btn {
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
     background: none;
     border: none;
     padding: 2px;
@@ -228,7 +229,19 @@
     transition: opacity 0.2s;
 }
 
+.message.sent .star-btn {
+    left: calc(100% + 8px);
+}
+
+.message.received .star-btn {
+    left: calc(100% + 8px);
+}
+
 .message:hover .star-btn {
+    opacity: 1;
+}
+
+.star-btn:hover {
     opacity: 1;
 }
 
@@ -437,4 +450,52 @@
     height: 1.5rem;
     border-width: 0.2em;
     color: var(--app-primary, #0d6efd);
+}
+
+.highlighted-message {
+    animation: highlight-message 3s ease-out;
+}
+
+@keyframes highlight-message {
+    0% {
+        background-color: var(--app-primary);
+        opacity: 0.3;
+    }
+
+    100% {
+        background-color: transparent;
+        opacity: 1;
+    }
+}
+
+.scroll-to-bottom-btn {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--app-primary);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+.scroll-to-bottom-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.scroll-to-bottom-btn.d-none {
+    display: none !important;
+}
+
+.scroll-to-bottom-btn i {
+    font-size: 20px;
 }

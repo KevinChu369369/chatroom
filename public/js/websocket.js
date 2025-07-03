@@ -17,6 +17,8 @@ class WebSocketHandler {
     this.sync_interval = null;
     this.scroll_listener = null;
     this.mark_read_timeout = null;
+    this.is_viewing_history = false;
+    this.scroll_timeout = null;
   }
 
   async connect() {
@@ -217,8 +219,8 @@ class WebSocketHandler {
               }
               break;
 
-            case "older_messages":
-              this.handleOlderMessages(data);
+            case "loaded_messages":
+              this.handleLoadedMessages(data);
               break;
           }
         } catch (error) {}
@@ -270,7 +272,7 @@ class WebSocketHandler {
     });
 
     // Request initial message history
-    this.requestMessageHistory(chatroom_id);
+    //this.requestMessageHistory(chatroom_id);
   }
 
   leaveChatroom(chatroom_id) {
@@ -293,11 +295,19 @@ class WebSocketHandler {
   }
 
   requestMessageHistory(chatroom_id) {
+    const target_message_id = sessionStorage.getItem("target_message_id");
+
     this.send({
       type: "history",
       chatroom_id: chatroom_id,
       user_id: this.user_id,
+      target_message_id: target_message_id || null,
     });
+
+    // Clear the target message ID after sending
+    if (target_message_id) {
+      sessionStorage.removeItem("target_message_id");
+    }
   }
 
   sendMessage(message) {
@@ -500,23 +510,41 @@ class WebSocketHandler {
     const messages_div = document.getElementById("messages");
     if (messages_div && !this.scroll_listener) {
       this.scroll_listener = () => {
-        const scroll_top = messages_div.scrollTop;
-        const scroll_height = messages_div.scrollHeight;
-        const client_height = messages_div.clientHeight;
-
-        // If user scrolled within 100px of bottom, mark messages as read
-        if (scroll_height - scroll_top - client_height < 100) {
-          this.markMessagesAsReadAfterScroll();
+        // Clear any existing timeout
+        if (this.scroll_timeout) {
+          clearTimeout(this.scroll_timeout);
         }
 
-        // If user scrolled to top and we have more messages to load
-        if (
-          scroll_top < 50 &&
-          !this.is_loading_messages &&
-          this.has_more_messages
-        ) {
-          this.loadOlderMessages();
-        }
+        // Debounce the scroll handling
+        this.scroll_timeout = setTimeout(() => {
+          const scroll_top = messages_div.scrollTop;
+          const scroll_height = messages_div.scrollHeight;
+          const client_height = messages_div.clientHeight;
+          const scroll_bottom = scroll_height - scroll_top - client_height;
+
+          // Mark messages as read when near bottom
+          if (scroll_bottom < 100) {
+            this.markMessagesAsReadAfterScroll();
+          }
+
+          // Load older messages when near top
+          if (
+            scroll_top < 50 &&
+            !this.is_loading_messages &&
+            this.has_more_messages
+          ) {
+            this.loadMessages("older");
+          }
+
+          // Load newer messages when near bottom
+          if (
+            scroll_bottom < 150 &&
+            !this.is_loading_messages &&
+            this.last_message_id > 0
+          ) {
+            this.loadMessages("newer");
+          }
+        }, 150); // Debounce time of 150ms
       };
 
       messages_div.addEventListener("scroll", this.scroll_listener);
@@ -550,12 +578,8 @@ class WebSocketHandler {
     }, 1000);
   }
 
-  loadOlderMessages() {
-    if (
-      !this.current_chatroom_id ||
-      this.is_loading_messages ||
-      !this.has_more_messages
-    ) {
+  loadMessages(direction = "older") {
+    if (!this.current_chatroom_id || this.is_loading_messages) {
       return;
     }
 
@@ -575,16 +599,23 @@ class WebSocketHandler {
         <span class="visually-hidden">Loading...</span>
       </div>
     `;
-    messages_div.insertBefore(loading_div, messages_div.firstChild);
+
+    if (direction === "older") {
+      messages_div.insertBefore(loading_div, messages_div.firstChild);
+    } else {
+      messages_div.appendChild(loading_div);
+    }
 
     this.send({
-      type: "load_older_messages",
+      type: "load_messages",
       chatroom_id: this.current_chatroom_id,
-      oldest_message_id: this.oldest_message_id,
+      direction: direction,
+      reference_message_id:
+        direction === "older" ? this.oldest_message_id : this.last_message_id,
     });
   }
 
-  handleOlderMessages(data) {
+  handleLoadedMessages(data) {
     const messages_div = document.getElementById("messages");
     if (!messages_div) return;
 
@@ -599,21 +630,23 @@ class WebSocketHandler {
       const old_scroll_height = messages_div.scrollHeight;
       const old_scroll_top = messages_div.scrollTop;
 
-      // Update oldest message ID
-      const new_oldest_id = Math.min(...data.messages.map((m) => m.id));
-      if (new_oldest_id < this.oldest_message_id) {
-        this.oldest_message_id = new_oldest_id;
+      if (data.direction === "older") {
+        // Update oldest message ID
+        const new_oldest_id = Math.min(...data.messages.map((m) => m.id));
+        if (new_oldest_id < this.oldest_message_id) {
+          this.oldest_message_id = new_oldest_id;
+        }
+      } else {
+        // Update last message ID
+        const new_last_id = Math.max(...data.messages.map((m) => m.id));
+        if (new_last_id > this.last_message_id) {
+          this.last_message_id = new_last_id;
+        }
       }
-
-      // Store the first existing message's date for comparison
-      const first_existing_message = messages_div.querySelector(".message");
-      const first_existing_date = first_existing_message
-        ? new Date(first_existing_message.dataset.date).toLocaleDateString()
-        : null;
 
       // Create a document fragment to hold new messages
       const fragment = document.createDocumentFragment();
-      let current_date = "";
+      let current_date = data.direction === "older" ? "" : this.last_date;
 
       // Process messages in chronological order
       data.messages.forEach((message) => {
@@ -622,18 +655,12 @@ class WebSocketHandler {
 
         // Only add date separator if it's a new date
         if (message_date_str !== current_date) {
-          // Don't add a date separator if this date already exists at the top
-          if (
-            message_date_str !== first_existing_date ||
-            !first_existing_message
-          ) {
-            const date_separator = document.createElement("div");
-            date_separator.className = "date-separator";
-            const date_span = document.createElement("span");
-            date_span.textContent = message_date_str;
-            date_separator.appendChild(date_span);
-            fragment.appendChild(date_separator);
-          }
+          const date_separator = document.createElement("div");
+          date_separator.className = "date-separator";
+          const date_span = document.createElement("span");
+          date_span.textContent = message_date_str;
+          date_separator.appendChild(date_span);
+          fragment.appendChild(date_separator);
           current_date = message_date_str;
         }
 
@@ -642,20 +669,19 @@ class WebSocketHandler {
         fragment.appendChild(message_div);
       });
 
-      // Insert all new messages at once
-      if (messages_div.firstChild) {
+      // Insert messages and maintain scroll position
+      if (data.direction === "older") {
         messages_div.insertBefore(fragment, messages_div.firstChild);
+        const height_difference = messages_div.scrollHeight - old_scroll_height;
+        messages_div.scrollTop = old_scroll_top + height_difference;
       } else {
         messages_div.appendChild(fragment);
+        messages_div.scrollTop = old_scroll_top;
       }
 
-      // Maintain scroll position after adding new content
-      const new_scroll_height = messages_div.scrollHeight;
-      const height_difference = new_scroll_height - old_scroll_height;
-      messages_div.scrollTop = old_scroll_top + height_difference;
+      this.has_more_messages = data.has_more_messages;
     }
 
-    this.has_more_messages = data.has_more;
     this.is_loading_messages = false;
   }
 
@@ -664,6 +690,9 @@ class WebSocketHandler {
       data.chatroom_id === this.current_chatroom_id &&
       Array.isArray(data.messages)
     ) {
+      // Set viewing history flag if we have a target message
+      this.is_viewing_history = !!data.target_message_id;
+
       // Clear existing messages first
       const messages_div = document.getElementById("messages");
       if (messages_div) {
@@ -681,29 +710,32 @@ class WebSocketHandler {
       if (data.messages.length > 0) {
         this.last_message_id = Math.max(...data.messages.map((m) => m.id));
         this.oldest_message_id = Math.min(...data.messages.map((m) => m.id));
-        // Set has_more_messages based on the number of messages received
-        this.has_more_messages = data.messages.length >= 50;
+        // Set has_more_messages based on the server response
+        this.has_more_messages = data.has_more_messages;
       } else {
         this.has_more_messages = false;
       }
 
-      // Store the oldest unread message ID for scrolling
-      let oldest_unread_element = null;
-      let has_unread_messages = false;
-      let unread_count = 0;
-
       // Remove any existing scroll listener before adding a new one
       this.removeScrollListener();
+
+      let target_message_element = null;
+      let has_unread_messages = false;
+      let unread_count = 0;
 
       // Append each message from the history
       data.messages.forEach((message) => {
         const message_element = this.appendMessage(message);
 
+        // If this is the target message, store its reference
+        if (message.id === data.target_message_id) {
+          target_message_element = message_element;
+        }
+
         // Count unread messages and mark the first one
         if (message.is_unread) {
           unread_count++;
-          if (!oldest_unread_element) {
-            oldest_unread_element = message_element;
+          if (!has_unread_messages) {
             has_unread_messages = true;
           }
         }
@@ -712,25 +744,31 @@ class WebSocketHandler {
       // Add scroll listener for infinite scrolling
       this.addScrollListener();
 
-      // Only scroll to unread messages if there are actually unread messages
-      if (has_unread_messages && oldest_unread_element) {
-        // Add a visual separator before the first unread message
-        this.addUnreadSeparator(oldest_unread_element, unread_count);
-
-        // Scroll to the unread separator
+      // Handle scrolling to the appropriate position
+      if (messages_div) {
         setTimeout(() => {
-          const separator = messages_div.querySelector(".unread-separator");
-          if (separator) {
-            separator.scrollIntoView({
+          if (target_message_element) {
+            // If we have a target message, scroll to it and highlight it
+            target_message_element.scrollIntoView({
               behavior: "smooth",
-              block: "start",
+              block: "center",
             });
+            target_message_element.classList.add("highlighted-message");
+            setTimeout(() => {
+              target_message_element.classList.remove("highlighted-message");
+              // Reset viewing history flag after highlighting is done
+              this.is_viewing_history = false;
+            }, 3000);
+          } else if (has_unread_messages) {
+            // If we have unread messages, scroll to the first unread
+            const separator = messages_div.querySelector(".unread-separator");
+            if (separator) {
+              separator.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          } else {
+            // Otherwise scroll to bottom
+            messages_div.scrollTop = messages_div.scrollHeight;
           }
-        }, 100);
-      } else {
-        // No unread messages, scroll to bottom
-        setTimeout(() => {
-          messages_div.scrollTop = messages_div.scrollHeight;
         }, 100);
       }
 

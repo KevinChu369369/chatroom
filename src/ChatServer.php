@@ -125,8 +125,8 @@ class ChatServer
                 case 'update_chatroom_list':
                     $this->handleUpdateChatroomList($server, $frame->fd, $data);
                     break;
-                case 'load_older_messages':
-                    $this->handleLoadOlderMessages($server, $frame->fd, $data);
+                case 'load_messages':
+                    $this->handleLoadMessages($server, $frame->fd, $data);
                     break;
                 default:
                     $this->sendToClient($server, $frame->fd, [
@@ -363,6 +363,7 @@ class ChatServer
 
         $chatroom_id = $data['chatroom_id'];
         $user_id = $this->getUserIdByFd($fd);
+        $target_message_id = isset($data['target_message_id']) ? (int)$data['target_message_id'] : null;
 
         // Check if user is a member of the chatroom
         if (!$this->isUserInChatroom($user_id, $chatroom_id)) {
@@ -373,54 +374,98 @@ class ChatServer
             return;
         }
 
-        // Get the oldest unread message ID for this user in this chatroom
-        $stmt = $this->db->prepare("
-            SELECT MIN(m.id) as oldest_unread_id, COUNT(*) as unread_count
-            FROM messages m
-            JOIN unread_messages um ON m.id = um.message_id AND um.user_id = ?
-            WHERE m.chatroom_id = ? AND um.is_read = FALSE
-        ");
-        $stmt->bind_param("ii", $user_id, $chatroom_id);
-        $stmt->execute();
-        $unread_result = $stmt->get_result();
-        $oldest_unread = $unread_result->fetch_assoc();
-        $oldest_unread_id = $oldest_unread['oldest_unread_id'];
-        $unread_count = $oldest_unread['unread_count'];
-
-        // Get message history, excluding deleted messages
-        if ($oldest_unread_id) {
+        // Get message history based on whether we have a target message
+        if ($target_message_id) {
+            // Get messages around the target message
             $stmt = $this->db->prepare("
-            (SELECT m.*, u.username, 'before' as message_group
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
-            WHERE m.chatroom_id = ? AND m.id < ?
-            AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
-            ORDER BY m.created_at DESC
-            LIMIT 25)
-            UNION ALL
-            (SELECT m.*, u.username, 'unread' as message_group
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
-            WHERE m.chatroom_id = ? AND m.id >= ?
-            AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
-            ORDER BY m.created_at ASC)
-            ORDER BY id ASC
-        ");
-            $stmt->bind_param("iiiiii", $user_id, $chatroom_id, $oldest_unread_id, $user_id, $chatroom_id, $oldest_unread_id);
+                (SELECT m.*, u.username, 'before' as message_group
+                FROM messages m
+                JOIN users u ON m.user_id = u.id
+                LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                WHERE m.chatroom_id = ? AND m.id < ?
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                ORDER BY m.created_at DESC
+                LIMIT 25)
+                UNION ALL
+                (SELECT m.*, u.username, 'target' as message_group
+                FROM messages m
+                JOIN users u ON m.user_id = u.id
+                LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                WHERE m.chatroom_id = ? AND m.id = ?
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at))
+                UNION ALL
+                (SELECT m.*, u.username, 'after' as message_group
+                FROM messages m
+                JOIN users u ON m.user_id = u.id
+                LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                WHERE m.chatroom_id = ? AND m.id > ?
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                ORDER BY m.created_at ASC
+                LIMIT 25)
+                ORDER BY created_at ASC
+            ");
+            $stmt->bind_param(
+                "iiiiiiiii",
+                $user_id,
+                $chatroom_id,
+                $target_message_id,  // for 'before' query
+                $user_id,
+                $chatroom_id,
+                $target_message_id,  // for 'target' query
+                $user_id,
+                $chatroom_id,
+                $target_message_id   // for 'after' query
+            );
         } else {
+            // Get the oldest unread message ID for this user in this chatroom
             $stmt = $this->db->prepare("
-            SELECT m.*, u.username, 'read' as message_group
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
-            WHERE m.chatroom_id = ?
-            AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
-            ORDER BY m.created_at DESC
-            LIMIT 50
-        ");
+                SELECT MIN(m.id) as oldest_unread_id, COUNT(*) as unread_count
+                FROM messages m
+                JOIN unread_messages um ON m.id = um.message_id AND um.user_id = ?
+                WHERE m.chatroom_id = ? AND um.is_read = FALSE
+            ");
             $stmt->bind_param("ii", $user_id, $chatroom_id);
+            $stmt->execute();
+            $unread_result = $stmt->get_result();
+            $oldest_unread = $unread_result->fetch_assoc();
+            $oldest_unread_id = $oldest_unread['oldest_unread_id'];
+            $unread_count = $oldest_unread['unread_count'];
+
+            // Get message history, excluding deleted messages
+            if ($oldest_unread_id) {
+                $stmt = $this->db->prepare("
+                    (SELECT m.*, u.username, 'before' as message_group
+                    FROM messages m
+                    JOIN users u ON m.user_id = u.id
+                    LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                    WHERE m.chatroom_id = ? AND m.id < ?
+                    AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    ORDER BY m.created_at DESC
+                    LIMIT 25)
+                    UNION ALL
+                    (SELECT m.*, u.username, 'unread' as message_group
+                    FROM messages m
+                    JOIN users u ON m.user_id = u.id
+                    LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                    WHERE m.chatroom_id = ? AND m.id >= ?
+                    AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    ORDER BY m.created_at ASC)
+                    ORDER BY created_at ASC
+                ");
+                $stmt->bind_param("iiiiii", $user_id, $chatroom_id, $oldest_unread_id, $user_id, $chatroom_id, $oldest_unread_id);
+            } else {
+                $stmt = $this->db->prepare("
+                    SELECT m.*, u.username, 'read' as message_group
+                    FROM messages m
+                    JOIN users u ON m.user_id = u.id
+                    LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                    WHERE m.chatroom_id = ?
+                    AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    ORDER BY m.created_at DESC
+                    LIMIT 50
+                ");
+                $stmt->bind_param("ii", $user_id, $chatroom_id);
+            }
         }
 
         $stmt->execute();
@@ -432,7 +477,7 @@ class ChatServer
         }
 
         // For the case where we got messages in DESC order, reverse them
-        if (!$oldest_unread_id) {
+        if (!$target_message_id && !$oldest_unread_id) {
             $messages = array_reverse($messages);
         }
 
@@ -466,8 +511,10 @@ class ChatServer
             'type' => 'history',
             'chatroom_id' => $chatroom_id,
             'messages' => $formatted_messages,
-            'oldest_unread_id' => $oldest_unread_id,
-            'unread_count' => $unread_count
+            'target_message_id' => $target_message_id,
+            'has_more_messages' => count($messages) >= 25,
+            'oldest_unread_id' => isset($oldest_unread_id) ? $oldest_unread_id : null,
+            'unread_count' => isset($unread_count) ? $unread_count : 0
         ]);
     }
 
@@ -644,18 +691,19 @@ class ChatServer
         ]);
     }
 
-    private function handleLoadOlderMessages($server, $fd, $data)
+    private function handleLoadMessages($server, $fd, $data)
     {
-        if (!isset($data['chatroom_id']) || !isset($data['oldest_message_id'])) {
+        if (!isset($data['chatroom_id']) || !isset($data['direction']) || !isset($data['reference_message_id'])) {
             $this->sendToClient($server, $fd, [
                 'type' => 'error',
-                'message' => 'Chatroom ID and oldest message ID are required'
+                'message' => 'Chatroom ID, direction, and reference message ID are required'
             ]);
             return;
         }
 
         $chatroom_id = $data['chatroom_id'];
-        $oldest_message_id = $data['oldest_message_id'];
+        $direction = $data['direction'];
+        $reference_message_id = $data['reference_message_id'];
         $user_id = $this->getUserIdByFd($fd);
 
         // Check if user is a member of the chatroom
@@ -667,18 +715,32 @@ class ChatServer
             return;
         }
 
-        // Get older messages in chronological order
-        $stmt = $this->db->prepare("
-            SELECT m.*, u.username
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
-            WHERE m.chatroom_id = ? AND m.id < ?
-            AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
-            ORDER BY m.created_at ASC
-            LIMIT 50
-        ");
-        $stmt->bind_param("iii", $user_id, $chatroom_id, $oldest_message_id);
+        // Prepare the SQL query based on direction
+        if ($direction === 'older') {
+            $stmt = $this->db->prepare("
+                SELECT m.*, u.username
+                FROM messages m
+                JOIN users u ON m.user_id = u.id
+                LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                WHERE m.chatroom_id = ? AND m.id < ?
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                ORDER BY m.created_at DESC
+                LIMIT 50
+            ");
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT m.*, u.username
+                FROM messages m
+                JOIN users u ON m.user_id = u.id
+                LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
+                WHERE m.chatroom_id = ? AND m.id > ?
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                ORDER BY m.created_at ASC
+                LIMIT 50
+            ");
+        }
+
+        $stmt->bind_param("iii", $user_id, $chatroom_id, $reference_message_id);
         $stmt->execute();
         $result = $stmt->get_result();
 
@@ -691,15 +753,22 @@ class ChatServer
                 'username' => $row['username'],
                 'content' => $row['content'],
                 'created_at' => date('Y-m-d H:i:s', strtotime($row['created_at'])),
-                'is_unread' => false // Older messages are always read
+                'is_unread' => false // Loaded messages are always considered read
             ];
         }
 
+        // For older messages, we need to reverse the order to show oldest first
+        if ($direction === 'older') {
+            $messages = array_reverse($messages);
+        }
+
         $this->sendToClient($server, $fd, [
-            'type' => 'older_messages',
+            'type' => 'loaded_messages',
+            'direction' => $direction,
             'chatroom_id' => $chatroom_id,
-            'messages' => $messages, // Messages are already in chronological order
-            'has_more' => count($messages) === 50 // If we got 50 messages, there might be more
+            'messages' => $messages,
+            'has_more_messages' => count($messages) >= 50,
+            'should_scroll' => $direction === 'newer' && count($messages) > 0
         ]);
     }
 

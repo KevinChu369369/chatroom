@@ -171,6 +171,7 @@ function get_initials($name)
     <!-- Include all the existing modals -->
     <?php include 'modals/members_modal.php'; ?>
     <?php include 'modals/leave_admin_modal.php'; ?>
+    <?php include 'modals/starred_modal.php'; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/picmo@latest/dist/umd/index.js"></script>
