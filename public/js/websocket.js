@@ -4,7 +4,7 @@ class WebSocketHandler {
     this.user_id = user_id;
     this.current_chatroom_id = null;
     this.reconnect_attempts = 0;
-    this.max_reconnect_attempts = 5;
+    this.max_reconnect_attempts = 10;
     this.reconnect_delay = 1000;
     this.token = null;
     this.is_connected = false;
@@ -19,100 +19,53 @@ class WebSocketHandler {
     this.mark_read_timeout = null;
     this.is_viewing_history = false;
     this.scroll_timeout = null;
+    this.connection_status_element = null;
+    this.pending_messages = [];
+    this.sent_message_ids = new Set();
   }
 
   async connect() {
     try {
       // First get a secure token
       const response = await fetch("api/get_ws_token.php");
-
       const data = await response.json();
-
       this.token = data.token;
 
       this.ws = new WebSocket("ws://localhost:9501");
 
       this.ws.onopen = () => {
+        console.log("WebSocket connected");
         this.reconnect_attempts = 0;
         this.is_connected = true;
-
+        this.updateConnectionStatus("connected");
         this.authenticate();
-
-        // Process any pending requests
         this.processPendingRequests();
+
+        // Try to resend any pending messages
+        this.resendPendingMessages();
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log("Received websocket message:", data);
 
           switch (data.type) {
             case "ping":
-              // Respond to heartbeat
               this.send({
                 type: "pong",
                 timestamp: data.timestamp,
               });
-
               break;
 
             case "join":
               if (data.success) {
-                // Request message history after joining
                 this.requestMessageHistory(data.chatroom_id);
               }
               break;
 
             case "message":
-              // Update last_message_id if this is a newer message
-              if (data.id > this.last_message_id) {
-                this.last_message_id = data.id;
-              }
-
-              // Check if the chatroom exists in the sidebar
-              const chatroom_exists = document.querySelector(
-                `[data-chatroom-id="${data.chatroom_id}"]`
-              );
-
-              if (!chatroom_exists && data.user_id !== this.user_id) {
-                // Request updated chatroom list to get the new chatroom
-                this.send({
-                  type: "update_chatroom_list",
-                  current_chatroom_id: this.current_chatroom_id,
-                });
-              }
-
-              this.updateChatPreview(data.chatroom_id, data.message);
-
-              // Display the message if it's for the current chatroom
-              if (data.chatroom_id === this.current_chatroom_id) {
-                // Create a message object with the correct structure
-                const message = {
-                  id: data.id,
-                  user_id: data.user_id,
-                  username: data.username,
-                  content: data.message,
-                  created_at: data.created_at,
-                  type: "text",
-                };
-                this.appendMessage(message);
-                // Remove any existing unread separator
-                const messages_div = document.getElementById("messages");
-                const existing_separator =
-                  messages_div.querySelector(".unread-separator");
-                if (existing_separator) {
-                  existing_separator.remove();
-                }
-
-                // Mark messages as read immediately for current chatroom
-                this.markMessagesAsRead(this.current_chatroom_id);
-              } else if (data.user_id !== this.user_id) {
-                // Only request unread counts if message is not for current chatroom AND not from current user
-                this.send({
-                  type: "get_unread_counts",
-                  current_chatroom_id: this.current_chatroom_id,
-                });
-              }
+              this.handleIncomingMessage(data);
               break;
 
             case "sync":
@@ -223,19 +176,28 @@ class WebSocketHandler {
               this.handleLoadedMessages(data);
               break;
           }
-        } catch (error) {}
+        } catch (error) {
+          console.error("Error processing message:", error);
+        }
       };
 
       this.ws.onclose = (event) => {
+        console.log("WebSocket closed:", event);
         this.is_connected = false;
+        this.updateConnectionStatus("disconnected");
         this.attemptReconnect();
       };
 
       this.ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
         this.is_connected = false;
+        this.updateConnectionStatus("error");
       };
     } catch (error) {
+      console.error("Connection error:", error);
       this.is_connected = false;
+      this.updateConnectionStatus("error");
+      this.attemptReconnect();
     }
   }
 
@@ -315,11 +277,41 @@ class WebSocketHandler {
       return;
     }
 
-    this.send({
+    const messageData = {
       type: "message",
       chatroom_id: this.current_chatroom_id,
       message: message,
+      temp_id: Date.now(), // Add a temporary ID to track this message
+    };
+
+    console.log("Sending message:", messageData);
+
+    // Optimistically add message to UI
+    this.appendMessage({
+      id: messageData.temp_id,
+      user_id: this.user_id,
+      username: current_user, // This should be defined in your page
+      content: message,
+      created_at: new Date().toISOString(),
+      is_pending: true,
+      temp_id: messageData.temp_id, // Store temp_id for later reference
     });
+
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.is_connected) {
+      try {
+        const json_data = JSON.stringify(messageData);
+        this.ws.send(json_data);
+        this.sent_message_ids.add(messageData.temp_id.toString());
+      } catch (error) {
+        console.error("Error sending message:", error);
+        this.pending_messages.push(messageData);
+        this.updateMessageStatus(messageData.temp_id, "failed");
+      }
+    } else {
+      console.log("Connection not ready, queueing message");
+      this.pending_messages.push(messageData);
+      this.updateMessageStatus(messageData.temp_id, "pending");
+    }
   }
 
   send(data) {
@@ -347,16 +339,40 @@ class WebSocketHandler {
   attemptReconnect() {
     if (this.reconnect_attempts < this.max_reconnect_attempts) {
       this.reconnect_attempts++;
-      setTimeout(
-        () => this.connect(),
-        this.reconnect_delay * this.reconnect_attempts
+      const delay = Math.min(
+        1000 * Math.pow(2, this.reconnect_attempts - 1),
+        30000
+      ); // Exponential backoff with max 30s
+      console.log(
+        `Attempting reconnect ${this.reconnect_attempts} in ${delay}ms`
       );
+
+      setTimeout(() => {
+        if (!this.is_connected) {
+          this.connect();
+        }
+      }, delay);
+    } else {
+      this.updateConnectionStatus("error");
+      this.connection_status_element.innerHTML =
+        '<div class="alert alert-danger" role="alert">' +
+        'Connection lost. Please <a href="javascript:void(0)" onclick="window.location.reload()">refresh</a> the page.' +
+        "</div>";
     }
   }
 
   appendMessage(message) {
     const messages_div = document.getElementById("messages");
     if (!messages_div) {
+      return;
+    }
+
+    // Check for existing message with same temp_id
+    if (
+      message.temp_id &&
+      document.querySelector(`[data-temp-id="${message.temp_id}"]`)
+    ) {
+      console.log("Message with temp_id already exists:", message.temp_id);
       return;
     }
 
@@ -374,7 +390,10 @@ class WebSocketHandler {
     }
 
     const created_message_div = this.createMessageElement(message);
-    created_message_div.dataset.date = message.created_at; // Store the date for future reference
+    if (message.temp_id) {
+      created_message_div.dataset.tempId = message.temp_id;
+    }
+    created_message_div.dataset.date = message.created_at;
     messages_div.appendChild(created_message_div);
 
     // Only auto-scroll if we're already at the bottom or if it's our own message
@@ -388,7 +407,9 @@ class WebSocketHandler {
     }
 
     // Check if message is starred
-    this.checkStarStatus(message.id);
+    if (!message.is_pending && message.id) {
+      this.checkStarStatus(message.id);
+    }
 
     return created_message_div;
   }
@@ -779,6 +800,78 @@ class WebSocketHandler {
     }
   }
 
+  handleIncomingMessage(data) {
+    console.log("Handling incoming message:", data);
+
+    // Update last_message_id if this is a newer message
+    if (data.id > this.last_message_id) {
+      this.last_message_id = data.id;
+    }
+
+    // Check if the chatroom exists in the sidebar
+    const chatroom_exists = document.querySelector(
+      `[data-chatroom-id="${data.chatroom_id}"]`
+    );
+
+    if (!chatroom_exists && data.user_id !== this.user_id) {
+      // Request updated chatroom list to get the new chatroom
+      this.send({
+        type: "update_chatroom_list",
+        current_chatroom_id: this.current_chatroom_id,
+      });
+    }
+
+    this.updateChatPreview(data.chatroom_id, data.message);
+
+    // Only proceed if this is for the current chatroom
+    if (data.chatroom_id === this.current_chatroom_id) {
+      // Check if this message already exists (either as temp or permanent)
+      const existingMessage =
+        document.querySelector(`[data-message-id="${data.id}"]`) ||
+        document.querySelector(`[data-temp-id="${data.temp_id}"]`);
+
+      if (existingMessage) {
+        console.log("Message already exists, updating if needed:", data);
+        // If it's our message being confirmed by the server
+        if (data.user_id === this.user_id && data.temp_id) {
+          existingMessage.dataset.messageId = data.id;
+          delete existingMessage.dataset.tempId;
+          this.updateMessageStatus(data.id, "sent");
+          this.sent_message_ids.delete(data.temp_id.toString());
+        }
+      } else if (data.user_id !== this.user_id) {
+        // Only append new messages from other users
+        console.log("Appending new message from other user:", data);
+        const message = {
+          id: data.id,
+          user_id: data.user_id,
+          username: data.username,
+          content: data.message,
+          created_at: data.created_at,
+          type: "text",
+        };
+        this.appendMessage(message);
+      }
+
+      // Remove any existing unread separator
+      const messages_div = document.getElementById("messages");
+      const existing_separator =
+        messages_div.querySelector(".unread-separator");
+      if (existing_separator) {
+        existing_separator.remove();
+      }
+
+      // Mark messages as read immediately for current chatroom
+      this.markMessagesAsRead(this.current_chatroom_id);
+    } else if (data.user_id !== this.user_id) {
+      // Only request unread counts if message is not for current chatroom AND not from current user
+      this.send({
+        type: "get_unread_counts",
+        current_chatroom_id: this.current_chatroom_id,
+      });
+    }
+  }
+
   // Helper method to create message element
   createMessageElement(message) {
     const message_div = document.createElement("div");
@@ -824,5 +917,78 @@ class WebSocketHandler {
     this.checkStarStatus(message.id);
 
     return message_div;
+  }
+
+  updateConnectionStatus(status) {
+    // Create or get the status element
+    if (!this.connection_status_element) {
+      this.connection_status_element = document.createElement("div");
+      this.connection_status_element.className = "connection-status";
+      document.body.appendChild(this.connection_status_element);
+    }
+
+    switch (status) {
+      case "connected":
+        this.connection_status_element.style.display = "none";
+        break;
+      case "disconnected":
+        this.connection_status_element.style.display = "block";
+        this.connection_status_element.innerHTML =
+          '<div class="alert alert-warning" role="alert">Disconnected. Attempting to reconnect...</div>';
+        break;
+      case "error":
+        this.connection_status_element.style.display = "block";
+        this.connection_status_element.innerHTML =
+          '<div class="alert alert-danger" role="alert">Connection error. Retrying...</div>';
+        break;
+    }
+  }
+
+  updateMessageStatus(message_id, status) {
+    const message_element = document.querySelector(
+      `[data-message-id="${message_id}"]`
+    );
+    if (message_element) {
+      const status_element =
+        message_element.querySelector(".message-status") ||
+        message_element.appendChild(document.createElement("div"));
+      status_element.className = "message-status";
+
+      switch (status) {
+        case "pending":
+          status_element.innerHTML = '<i class="bi bi-clock text-warning"></i>';
+          break;
+        case "failed":
+          status_element.innerHTML =
+            '<i class="bi bi-exclamation-circle text-danger"></i> Failed to send. ' +
+            '<a href="javascript:void(0)" onclick="chat_ws.resendMessage(' +
+            message_id +
+            ')">Retry</a>';
+          break;
+        case "sent":
+          status_element.remove(); // Remove status indicator when sent successfully
+          break;
+      }
+    }
+  }
+
+  resendMessage(temp_id) {
+    console.log("Resending message:", temp_id);
+    const pending_message = this.pending_messages.find(
+      (m) => m.temp_id === temp_id
+    );
+    if (pending_message) {
+      this.sendMessage(pending_message.message);
+      this.pending_messages = this.pending_messages.filter(
+        (m) => m.temp_id !== temp_id
+      );
+    }
+  }
+
+  resendPendingMessages() {
+    while (this.pending_messages.length > 0) {
+      const message = this.pending_messages.shift();
+      this.sendMessage(message.message);
+    }
   }
 }

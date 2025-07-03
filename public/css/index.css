@@ -499,3 +499,28 @@
 .scroll-to-bottom-btn i {
     font-size: 20px;
 }
+
+.connection-status {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    max-width: 300px;
+}
+
+.message-status {
+    font-size: 0.8em;
+    margin-top: 4px;
+}
+
+.message-status i {
+    margin-right: 4px;
+}
+
+.message.sent .message-status {
+    text-align: right;
+}
+
+.message.received .message-status {
+    text-align: left;
+}
