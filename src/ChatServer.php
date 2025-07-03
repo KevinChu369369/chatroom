@@ -4,6 +4,9 @@ ini_set('display_errors', 1);
 
 require_once __DIR__ . '/../docker_config.php';
 
+use Swoole\WebSocket\Server;
+
+
 class ChatServer
 {
     protected $user_connections = [];
@@ -790,8 +793,21 @@ class ChatServer
         try {
             $json_message = json_encode($message);
             if ($json_message === false) {
+                echo date('Y-m-d H:i:s') . " Error encoding message to JSON\n";
                 return;
             }
+
+            // Check if connection exists before sending
+            if (!$server->exist($fd)) {
+                echo date('Y-m-d H:i:s') . " Connection {$fd} no longer exists\n";
+                // Clean up the connection from our tracking
+                $user_id = $this->getUserIdByFd($fd);
+                if ($user_id !== null) {
+                    unset($this->user_connections[$user_id]);
+                }
+                return;
+            }
+
             $server->push($fd, $json_message);
         } catch (\Exception $e) {
             echo date('Y-m-d H:i:s') . " Error sending message: " . $e->getMessage() . "\n";
@@ -810,7 +826,7 @@ class ChatServer
 }
 
 try {
-    $server = new Swoole\WebSocket\Server("0.0.0.0", 9501);
+    $server = new Server("0.0.0.0", 9501);
 
     $chat_server = new ChatServer();
 
