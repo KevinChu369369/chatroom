@@ -687,6 +687,20 @@ class WebSocketHandler {
 
         const message_div = this.createMessageElement(message);
         message_div.dataset.date = message.created_at;
+
+        // Add unread separator for newer messages if needed
+        if (data.direction === "newer" && message.is_unread) {
+          const existing_separator =
+            messages_div.querySelector(".unread-separator");
+          if (!existing_separator) {
+            // Count remaining unread messages
+            const unread_count = data.messages.filter(
+              (m) => m.is_unread
+            ).length;
+            this.addUnreadSeparator(message_div, unread_count);
+          }
+        }
+
         fragment.appendChild(message_div);
       });
 
@@ -758,6 +772,8 @@ class WebSocketHandler {
           unread_count++;
           if (!has_unread_messages) {
             has_unread_messages = true;
+            // Add unread separator before the first unread message
+            this.addUnreadSeparator(message_element, data.unread_count);
           }
         }
       });
