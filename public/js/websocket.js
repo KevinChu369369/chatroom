@@ -3,9 +3,6 @@ class WebSocketHandler {
     this.ws = null;
     this.user_id = user_id;
     this.current_chatroom_id = null;
-    this.reconnect_attempts = 0;
-    this.max_reconnect_attempts = 10;
-    this.reconnect_delay = 1000;
     this.token = null;
     this.is_connected = false;
     this.pending_requests = [];
@@ -35,7 +32,6 @@ class WebSocketHandler {
 
       this.ws.onopen = () => {
         console.log("WebSocket connected");
-        this.reconnect_attempts = 0;
         this.is_connected = true;
         this.updateConnectionStatus("connected");
         this.authenticate();
@@ -337,28 +333,13 @@ class WebSocketHandler {
   }
 
   attemptReconnect() {
-    if (this.reconnect_attempts < this.max_reconnect_attempts) {
-      this.reconnect_attempts++;
-      const delay = Math.min(
-        1000 * Math.pow(2, this.reconnect_attempts - 1),
-        30000
-      ); // Exponential backoff with max 30s
-      console.log(
-        `Attempting reconnect ${this.reconnect_attempts} in ${delay}ms`
-      );
+    console.log(`Attempting reconnect ${this.reconnect_attempts} in ${1000}ms`);
 
-      setTimeout(() => {
-        if (!this.is_connected) {
-          this.connect();
-        }
-      }, delay);
-    } else {
-      this.updateConnectionStatus("error");
-      this.connection_status_element.innerHTML =
-        '<div class="alert alert-danger" role="alert">' +
-        'Connection lost. Please <a href="javascript:void(0)" onclick="window.location.reload()">refresh</a> the page.' +
-        "</div>";
-    }
+    setTimeout(() => {
+      if (!this.is_connected) {
+        this.connect();
+      }
+    }, 1000);
   }
 
   appendMessage(message) {
