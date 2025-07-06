@@ -6,13 +6,10 @@ require_once __DIR__ . '/../docker_config.php';
 
 use Swoole\WebSocket\Server;
 
-
 class ChatServer
 {
     protected $user_connections = [];
     protected $db;
-    protected $last_ping = [];
-    protected $last_heartbeat;
     protected $server;
 
     public function __construct()
@@ -21,8 +18,6 @@ class ChatServer
             global $host, $username, $password, $db_name;
 
             $this->user_connections = [];
-            $this->last_ping = [];
-            $this->last_heartbeat = time();
 
             // Set timezone to GMT+8
             date_default_timezone_set('Asia/Hong_Kong');
@@ -35,41 +30,6 @@ class ChatServer
         } catch (Exception $e) {
             echo date('Y-m-d H:i:s') . " Error in constructor: " . $e->getMessage() . "\n";
             exit(1);
-        }
-    }
-
-    private function checkHeartbeat()
-    {
-        $current_time = time();
-        // Only send heartbeat every 30 seconds
-        if ($current_time - $this->last_heartbeat >= 30) {
-            $this->sendHeartbeat();
-            $this->last_heartbeat = $current_time;
-        }
-    }
-
-    private function sendHeartbeat()
-    {
-        foreach ($this->user_connections as $fd) {
-            $this->sendToClient($this->server, $fd, [
-                'type' => 'ping',
-                'timestamp' => time()
-            ]);
-        }
-
-        // Check for stale connections
-        foreach ($this->last_ping as $fd => $lastPing) {
-            if (time() - $lastPing > 90) { // If no response for 90 seconds
-                // Find and close stale connection
-                $this->server->close($fd);
-                unset($this->last_ping[$fd]);
-
-                // Remove user from chatrooms
-                $user_id = $this->getUserIdByFd($fd);
-                if ($user_id !== null) {
-                    unset($this->user_connections[$user_id]);
-                }
-            }
         }
     }
 
@@ -87,16 +47,8 @@ class ChatServer
     public function onMessage($server, $frame)
     {
         try {
-            $this->checkHeartbeat();
-
             $data = json_decode($frame->data, true);
             if (!$data || !isset($data['type'])) {
-                return;
-            }
-
-            // Handle ping responses
-            if ($data['type'] === 'pong') {
-                $this->last_ping[$frame->fd] = time();
                 return;
             }
 
@@ -148,6 +100,7 @@ class ChatServer
 
     public function onClose($server, $fd)
     {
+        echo date('Y-m-d H:i:s') . " Connection closed: fd id: {$fd}\n";
         // Remove user from connections
         $user_id = $this->getUserIdByFd($fd);
         if ($user_id !== null) {
@@ -827,6 +780,12 @@ class ChatServer
 
 try {
     $server = new Server("0.0.0.0", 9501);
+
+    // Configure heartbeat settings
+    $server->set([
+        'heartbeat_check_interval' => 300,    // Check every 300 seconds
+        'heartbeat_idle_time' => 600,         // Connection idle timeout after 600 seconds
+    ]);
 
     $chat_server = new ChatServer();
 

@@ -19,6 +19,9 @@ class WebSocketHandler {
     this.connection_status_element = null;
     this.pending_messages = [];
     this.sent_message_ids = new Set();
+    document.addEventListener("click", () => {
+      this.attemptReconnect();
+    });
   }
 
   async connect() {
@@ -31,9 +34,7 @@ class WebSocketHandler {
       this.ws = new WebSocket("ws://localhost:9501");
 
       this.ws.onopen = () => {
-        console.log("WebSocket connected");
         this.is_connected = true;
-        this.updateConnectionStatus("connected");
         this.authenticate();
         this.processPendingRequests();
 
@@ -44,16 +45,8 @@ class WebSocketHandler {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log("Received websocket message:", data);
 
           switch (data.type) {
-            case "ping":
-              this.send({
-                type: "pong",
-                timestamp: data.timestamp,
-              });
-              break;
-
             case "join":
               if (data.success) {
                 this.requestMessageHistory(data.chatroom_id);
@@ -178,22 +171,16 @@ class WebSocketHandler {
       };
 
       this.ws.onclose = (event) => {
-        console.log("WebSocket closed:", event);
         this.is_connected = false;
-        this.updateConnectionStatus("disconnected");
-        this.attemptReconnect();
       };
 
       this.ws.onerror = (error) => {
         console.error("WebSocket error:", error);
         this.is_connected = false;
-        this.updateConnectionStatus("error");
       };
     } catch (error) {
       console.error("Connection error:", error);
       this.is_connected = false;
-      this.updateConnectionStatus("error");
-      this.attemptReconnect();
     }
   }
 
@@ -280,8 +267,6 @@ class WebSocketHandler {
       temp_id: Date.now(), // Add a temporary ID to track this message
     };
 
-    console.log("Sending message:", messageData);
-
     // Optimistically add message to UI
     this.appendMessage({
       id: messageData.temp_id,
@@ -304,7 +289,6 @@ class WebSocketHandler {
         this.updateMessageStatus(messageData.temp_id, "failed");
       }
     } else {
-      console.log("Connection not ready, queueing message");
       this.pending_messages.push(messageData);
       this.updateMessageStatus(messageData.temp_id, "pending");
     }
@@ -333,13 +317,9 @@ class WebSocketHandler {
   }
 
   attemptReconnect() {
-    console.log(`Attempting reconnect ${this.reconnect_attempts} in ${1000}ms`);
-
-    setTimeout(() => {
-      if (!this.is_connected) {
-        this.connect();
-      }
-    }, 1000);
+    if (!this.is_connected) {
+      this.connect();
+    }
   }
 
   appendMessage(message) {
@@ -353,7 +333,6 @@ class WebSocketHandler {
       message.temp_id &&
       document.querySelector(`[data-temp-id="${message.temp_id}"]`)
     ) {
-      console.log("Message with temp_id already exists:", message.temp_id);
       return;
     }
 
@@ -535,6 +514,7 @@ class WebSocketHandler {
             !this.is_loading_messages &&
             this.has_more_messages
           ) {
+            this.attemptReconnect();
             this.loadMessages("older");
           }
 
@@ -544,6 +524,7 @@ class WebSocketHandler {
             !this.is_loading_messages &&
             this.last_message_id > 0
           ) {
+            this.attemptReconnect();
             this.loadMessages("newer");
           }
         }, 150); // Debounce time of 150ms
@@ -798,8 +779,6 @@ class WebSocketHandler {
   }
 
   handleIncomingMessage(data) {
-    console.log("Handling incoming message:", data);
-
     // Update last_message_id if this is a newer message
     if (data.id > this.last_message_id) {
       this.last_message_id = data.id;
@@ -828,7 +807,6 @@ class WebSocketHandler {
         document.querySelector(`[data-temp-id="${data.temp_id}"]`);
 
       if (existingMessage) {
-        console.log("Message already exists, updating if needed:", data);
         // If it's our message being confirmed by the server
         if (data.user_id === this.user_id && data.temp_id) {
           existingMessage.dataset.messageId = data.id;
@@ -838,7 +816,6 @@ class WebSocketHandler {
         }
       } else if (data.user_id !== this.user_id) {
         // Only append new messages from other users
-        console.log("Appending new message from other user:", data);
         const message = {
           id: data.id,
           user_id: data.user_id,
@@ -916,31 +893,6 @@ class WebSocketHandler {
     return message_div;
   }
 
-  updateConnectionStatus(status) {
-    // Create or get the status element
-    if (!this.connection_status_element) {
-      this.connection_status_element = document.createElement("div");
-      this.connection_status_element.className = "connection-status";
-      document.body.appendChild(this.connection_status_element);
-    }
-
-    switch (status) {
-      case "connected":
-        this.connection_status_element.style.display = "none";
-        break;
-      case "disconnected":
-        this.connection_status_element.style.display = "block";
-        this.connection_status_element.innerHTML =
-          '<div class="alert alert-warning" role="alert">Disconnected. Attempting to reconnect...</div>';
-        break;
-      case "error":
-        this.connection_status_element.style.display = "block";
-        this.connection_status_element.innerHTML =
-          '<div class="alert alert-danger" role="alert">Connection error. Retrying...</div>';
-        break;
-    }
-  }
-
   updateMessageStatus(message_id, status) {
     const message_element = document.querySelector(
       `[data-message-id="${message_id}"]`
@@ -970,7 +922,6 @@ class WebSocketHandler {
   }
 
   resendMessage(temp_id) {
-    console.log("Resending message:", temp_id);
     const pending_message = this.pending_messages.find(
       (m) => m.temp_id === temp_id
     );
