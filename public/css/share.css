@@ -31,3 +31,13 @@ body {
 .main-layout.nav-expanded {
     margin-left: var(--nav-width);
 }
+
+/* Header styles */
+.contacts-sidebar .sidebar-header,
+.chat-list-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--app-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}

@@ -112,8 +112,8 @@ function get_initials($name)
     <div class="main-layout">
         <!-- Sidebar -->
         <div class="chat-sidebar">
-            <div class="search-box">
-                <input type="text" placeholder="Search chats..." id="chatSearch">
+            <div class="chat-list-header">
+                <h5 class="mb-0">Chats</h5>
             </div>
             <div class="chat-list">
                 <?php
@@ -325,16 +325,6 @@ function get_initials($name)
                     loadChatroom(chatroom_id);
                 });
             });
-
-            // Search functionality
-            document.getElementById('chatSearch').addEventListener('input', function(e) {
-                const search_term = e.target.value.toLowerCase();
-                document.querySelectorAll('.chat-item').forEach(item => {
-                    const chat_name = item.querySelector('.chat-name').textContent.toLowerCase();
-                    item.style.display = chat_name.includes(search_term) ? 'flex' : 'none';
-                });
-            });
-
 
             // Handle browser back/forward navigation
             window.addEventListener('popstate', function(event) {

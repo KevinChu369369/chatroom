@@ -59,15 +59,6 @@
     background-color: var(--app-hover);
 }
 
-/* Header styles */
-.contacts-sidebar .sidebar-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--app-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
 /* Modal styles */
 .modal-content {
     border-radius: 12px;
