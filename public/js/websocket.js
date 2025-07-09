@@ -19,6 +19,7 @@ class WebSocketHandler {
     this.connection_status_element = null;
     this.pending_messages = [];
     this.sent_message_ids = new Set();
+    this.current_date = null;
     document.addEventListener("click", () => {
       this.attemptReconnect();
     });
@@ -339,16 +340,6 @@ class WebSocketHandler {
     const message_date = new Date(message.created_at);
     const message_date_str = message_date.toLocaleDateString();
 
-    if (message_date_str !== this.last_date) {
-      const date_separator = document.createElement("div");
-      date_separator.className = "date-separator";
-      const date_span = document.createElement("span");
-      date_span.textContent = message_date_str;
-      date_separator.appendChild(date_span);
-      messages_div.appendChild(date_separator);
-      this.last_date = message_date_str;
-    }
-
     const created_message_div = this.createMessageElement(message);
     if (message.temp_id) {
       created_message_div.dataset.tempId = message.temp_id;
@@ -356,7 +347,10 @@ class WebSocketHandler {
     created_message_div.dataset.date = message.created_at;
     messages_div.appendChild(created_message_div);
 
-    // Only auto-scroll if we're already at the bottom or if it's our own message
+    // Update date separators after adding new message
+    this.updateVisibleDateSeparator();
+
+    // Auto-scroll logic
     const is_at_bottom =
       messages_div.scrollHeight -
         messages_div.scrollTop -
@@ -490,13 +484,23 @@ class WebSocketHandler {
   addScrollListener() {
     const messages_div = document.getElementById("messages");
     if (messages_div && !this.scroll_listener) {
+      // Simple throttled scroll handler for date separators
+      let last_update = 0;
+      messages_div.addEventListener("scroll", () => {
+        const now = Date.now();
+        if (now - last_update > 50) {
+          // Throttle to max 20 updates per second
+          this.updateVisibleDateSeparator();
+          last_update = now;
+        }
+      });
+
+      // Debounced listener for other scroll-related operations
       this.scroll_listener = () => {
-        // Clear any existing timeout
         if (this.scroll_timeout) {
           clearTimeout(this.scroll_timeout);
         }
 
-        // Debounce the scroll handling
         this.scroll_timeout = setTimeout(() => {
           const scroll_top = messages_div.scrollTop;
           const scroll_height = messages_div.scrollHeight;
@@ -527,11 +531,64 @@ class WebSocketHandler {
             this.attemptReconnect();
             this.loadMessages("newer");
           }
-        }, 150); // Debounce time of 150ms
+        }, 150);
       };
 
       messages_div.addEventListener("scroll", this.scroll_listener);
     }
+  }
+
+  updateVisibleDateSeparator() {
+    const messages_div = document.getElementById("messages");
+    if (!messages_div) return;
+
+    const message_elements = Array.from(
+      messages_div.querySelectorAll("[data-date]")
+    );
+    if (!message_elements.length) return;
+
+    const scroll_top = messages_div.scrollTop;
+    let current_visible_date = null;
+
+    // Remove all existing separators first
+    messages_div
+      .querySelectorAll(".date-separator")
+      .forEach((sep) => sep.remove());
+
+    // Create a map to store first message for each date
+    const date_first_messages = new Map();
+
+    // Find first visible message and first message of each date
+    message_elements.forEach((message) => {
+      const message_top = message.offsetTop;
+      const message_date = new Date(message.dataset.date).toLocaleDateString();
+
+      // Track first message of each date
+      if (!date_first_messages.has(message_date)) {
+        date_first_messages.set(message_date, message);
+      }
+
+      // Find first visible message's date
+      if (message_top >= scroll_top && !current_visible_date) {
+        current_visible_date = message_date;
+      }
+    });
+
+    // Add separators for each unique date
+    date_first_messages.forEach((first_message, date) => {
+      const separator = document.createElement("div");
+      separator.className = "date-separator";
+      if (date === current_visible_date) {
+        separator.classList.add("sticky");
+      }
+
+      const date_span = document.createElement("span");
+      date_span.textContent = date;
+      separator.appendChild(date_span);
+
+      // Insert before the first message of this date
+      messages_div.insertBefore(separator, first_message);
+    });
   }
 
   removeScrollListener() {
@@ -613,6 +670,11 @@ class WebSocketHandler {
       const old_scroll_height = messages_div.scrollHeight;
       const old_scroll_top = messages_div.scrollTop;
 
+      // Remove existing date separators
+      const existing_separators =
+        messages_div.querySelectorAll(".date-separator");
+      existing_separators.forEach((sep) => sep.remove());
+
       if (data.direction === "older") {
         // Update oldest message ID
         const new_oldest_id = Math.min(...data.messages.map((m) => m.id));
@@ -636,10 +698,9 @@ class WebSocketHandler {
         const message_date = new Date(message.created_at);
         const message_date_str = message_date.toLocaleDateString();
 
-        // Only add date separator if it's a new date
         if (message_date_str !== current_date) {
           const date_separator = document.createElement("div");
-          date_separator.className = "date-separator";
+          date_separator.className = "date-separator sticky";
           const date_span = document.createElement("span");
           date_span.textContent = message_date_str;
           date_separator.appendChild(date_span);
@@ -649,20 +710,6 @@ class WebSocketHandler {
 
         const message_div = this.createMessageElement(message);
         message_div.dataset.date = message.created_at;
-
-        // Add unread separator for newer messages if needed
-        if (data.direction === "newer" && message.is_unread) {
-          const existing_separator =
-            messages_div.querySelector(".unread-separator");
-          if (!existing_separator) {
-            // Count remaining unread messages
-            const unread_count = data.messages.filter(
-              (m) => m.is_unread
-            ).length;
-            this.addUnreadSeparator(message_div, unread_count);
-          }
-        }
-
         fragment.appendChild(message_div);
       });
 
@@ -687,67 +734,66 @@ class WebSocketHandler {
       data.chatroom_id === this.current_chatroom_id &&
       Array.isArray(data.messages)
     ) {
+      const messages_div = document.getElementById("messages");
+      if (!messages_div) return;
+
       // Set viewing history flag if we have a target message
       this.is_viewing_history = !!data.target_message_id;
 
-      // Clear existing messages first
-      const messages_div = document.getElementById("messages");
-      if (messages_div) {
-        messages_div.innerHTML = "";
-      }
+      // Clear existing messages
+      messages_div.innerHTML = "";
 
-      // Reset message tracking variables
+      // Reset tracking variables
       this.last_message_id = 0;
       this.oldest_message_id = Infinity;
-      this.has_more_messages = true;
-      this.last_date = "";
+      this.has_more_messages = data.has_more_messages;
       this.is_loading_messages = false;
 
-      // Update last_message_id and oldest_message_id from history
       if (data.messages.length > 0) {
-        this.last_message_id = Math.max(...data.messages.map((m) => m.id));
-        this.oldest_message_id = Math.min(...data.messages.map((m) => m.id));
-        // Set has_more_messages based on the server response
-        this.has_more_messages = data.has_more_messages;
-      } else {
-        this.has_more_messages = false;
-      }
+        // Sort messages by date
+        const sorted_messages = [...data.messages].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
 
-      // Remove any existing scroll listener before adding a new one
-      this.removeScrollListener();
+        // Group messages by date
+        let current_date = null;
+        let target_message_element = null;
 
-      let target_message_element = null;
-      let has_unread_messages = false;
-      let unread_count = 0;
+        sorted_messages.forEach((message) => {
+          const message_date = new Date(
+            message.created_at
+          ).toLocaleDateString();
 
-      // Append each message from the history
-      data.messages.forEach((message) => {
-        const message_element = this.appendMessage(message);
-
-        // If this is the target message, store its reference
-        if (message.id === data.target_message_id) {
-          target_message_element = message_element;
-        }
-
-        // Count unread messages and mark the first one
-        if (message.is_unread) {
-          unread_count++;
-          if (!has_unread_messages) {
-            has_unread_messages = true;
-            // Add unread separator before the first unread message
-            this.addUnreadSeparator(message_element, data.unread_count);
+          // Add date separator if date changes
+          if (message_date !== current_date) {
+            const date_separator = document.createElement("div");
+            date_separator.className = "date-separator";
+            const date_span = document.createElement("span");
+            date_span.textContent = message_date;
+            date_separator.appendChild(date_span);
+            messages_div.appendChild(date_separator);
+            current_date = message_date;
           }
-        }
-      });
 
-      // Add scroll listener for infinite scrolling
-      this.addScrollListener();
+          // Add message
+          const message_element = this.appendMessage(message);
 
-      // Handle scrolling to the appropriate position
-      if (messages_div) {
+          // Store reference if this is the target message
+          if (message.id === data.target_message_id) {
+            target_message_element = message_element;
+          }
+
+          // Update tracking variables
+          this.last_message_id = Math.max(this.last_message_id, message.id);
+          this.oldest_message_id = Math.min(this.oldest_message_id, message.id);
+        });
+
+        // Update date separators after all messages are added
         setTimeout(() => {
+          this.updateVisibleDateSeparator();
+
+          // Handle scrolling to target message if exists
           if (target_message_element) {
-            // If we have a target message, scroll to it and highlight it
             target_message_element.scrollIntoView({
               behavior: "smooth",
               block: "center",
@@ -755,26 +801,17 @@ class WebSocketHandler {
             target_message_element.classList.add("highlighted-message");
             setTimeout(() => {
               target_message_element.classList.remove("highlighted-message");
-              // Reset viewing history flag after highlighting is done
               this.is_viewing_history = false;
             }, 3000);
-          } else if (has_unread_messages) {
-            // If we have unread messages, scroll to the first unread
-            const separator = messages_div.querySelector(".unread-separator");
-            if (separator) {
-              separator.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
           } else {
-            // Otherwise scroll to bottom
+            // If no target message, scroll to bottom
             messages_div.scrollTop = messages_div.scrollHeight;
           }
-        }, 100);
+        }, 0);
       }
 
-      // Mark messages as read after a short delay
-      setTimeout(() => {
-        this.markMessagesAsRead(data.chatroom_id);
-      }, 1000);
+      // Add scroll listener
+      this.addScrollListener();
     }
   }
 
