@@ -1,32 +1,177 @@
 // Handle vertical nav toggle
 const nav_toggle = document.querySelector(".nav-toggle");
 const vertical_nav = document.querySelector(".vertical-nav");
+const nav_close_btn = document.querySelector(".nav-close-btn");
 
-nav_toggle.addEventListener("click", function () {
-  vertical_nav.classList.toggle("expanded");
-  document.querySelector(".main-layout").classList.toggle("nav-expanded");
-});
+// Create navigation overlay for mobile
+function createNavOverlay() {
+  if (!document.querySelector(".nav-overlay")) {
+    const overlay = document.createElement("div");
+    overlay.className = "nav-overlay";
+    document.body.appendChild(overlay);
 
-// Close nav when clicking outside
-document.addEventListener("click", function (e) {
-  if (
-    !vertical_nav.contains(e.target) &&
-    vertical_nav.classList.contains("expanded")
-  ) {
-    vertical_nav.classList.remove("expanded");
-    document.querySelector(".main-layout").classList.remove("nav-expanded");
+    // Close navigation when clicking overlay
+    overlay.addEventListener("click", function () {
+      closeNavigation();
+    });
+  }
+}
+
+// Function to open navigation
+function openNavigation() {
+  console.log("open Navigation");
+  vertical_nav.classList.add("expanded");
+  document.querySelector(".main-layout").classList.add("nav-expanded");
+
+  // Add overlay on mobile
+  if (window.innerWidth <= 768) {
+    console.log("createNavOverlay");
+    createNavOverlay();
+    document.querySelector(".nav-overlay").classList.add("active");
+    document.body.style.overflow = "hidden"; // Prevent background scrolling
+  }
+}
+
+// Function to close navigation
+function closeNavigation() {
+  vertical_nav.classList.remove("expanded");
+  document.querySelector(".main-layout").classList.remove("nav-expanded");
+
+  // Remove overlay
+  const overlay = document.querySelector(".nav-overlay");
+  if (overlay) {
+    overlay.classList.remove("active");
+    document.body.style.overflow = ""; // Restore scrolling
+  }
+}
+
+// Toggle navigation
+nav_toggle.addEventListener("click", function (e) {
+  e.stopPropagation();
+  if (vertical_nav.classList.contains("expanded")) {
+    closeNavigation();
+  } else {
+    openNavigation();
   }
 });
 
-// Function to set active menu item
-function setActiveMenuItem(clicked_link) {
-  // Remove active class from all nav links
-  document.querySelectorAll(".nav-menu .nav-link").forEach((link) => {
-    link.classList.remove("active");
+// Handle mobile menu toggle clicks
+document.addEventListener("click", function (e) {
+  const mobileToggle = e.target.closest(".mobile-nav-toggle");
+  if (mobileToggle) {
+    e.stopPropagation();
+    if (vertical_nav.classList.contains("expanded")) {
+      closeNavigation();
+    } else {
+      openNavigation();
+    }
+  }
+  // Close nav when clicking outside
+  if (
+    !vertical_nav.contains(e.target) &&
+    !nav_toggle.contains(e.target) &&
+    !e.target.closest(".mobile-nav-toggle") &&
+    vertical_nav.classList.contains("expanded")
+  ) {
+    closeNavigation();
+  }
+});
+
+// Handle escape key to close navigation
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && vertical_nav.classList.contains("expanded")) {
+    closeNavigation();
+  }
+});
+
+// Handle window resize to close navigation on desktop
+window.addEventListener("resize", function () {
+  if (window.innerWidth > 768 && vertical_nav.classList.contains("expanded")) {
+    closeNavigation();
+  }
+});
+
+// Add close button event listener
+if (nav_close_btn) {
+  nav_close_btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    closeNavigation();
   });
-  // Add active class to clicked link
-  clicked_link.classList.add("active");
 }
+
+// Mobile chat navigation enhancement
+function handleMobileChatNavigation() {
+  if (window.innerWidth <= 768) {
+    const chatItems = document.querySelectorAll(".chat-item");
+    const chatMain = document.querySelector(".chat-main");
+    const chatSidebar = document.querySelector(".chat-sidebar");
+
+    chatItems.forEach((item) => {
+      const originalClickHandler = item.onclick;
+
+      item.addEventListener("click", function () {
+        // On mobile, hide sidebar and show chat
+        if (window.innerWidth <= 768) {
+          chatSidebar.style.display = "none";
+          chatMain.classList.add("active");
+
+          // Add back button to chat header
+          setTimeout(() => {
+            addBackButtonToChat();
+          }, 100);
+        }
+      });
+    });
+  }
+}
+
+// Add back button to chat header for mobile navigation
+function addBackButtonToChat() {
+  const chatHeader = document.querySelector(".chat-header");
+  if (chatHeader && window.innerWidth <= 768) {
+    // Check if back button doesn't already exist
+    if (!chatHeader.querySelector(".back-button")) {
+      const backButton = document.createElement("button");
+      backButton.className = "btn btn-link back-button p-0 me-2";
+      backButton.innerHTML = '<i class="bi bi-arrow-left"></i>';
+      backButton.style.fontSize = "1.25rem";
+      backButton.style.color = "var(--app-text)";
+
+      backButton.addEventListener("click", function () {
+        // Show sidebar and hide chat
+        document.querySelector(".chat-sidebar").style.display = "flex";
+        document.querySelector(".chat-main").classList.remove("active");
+        this.remove(); // Remove the back button
+      });
+
+      // Insert at the beginning of chat header
+      chatHeader.insertBefore(backButton, chatHeader.firstChild);
+    }
+  }
+}
+
+// Initialize mobile enhancements when DOM is loaded
+document.addEventListener("DOMContentLoaded", function () {
+  // Create overlay element
+  createNavOverlay();
+
+  // Handle mobile chat navigation
+  handleMobileChatNavigation();
+
+  // Re-apply mobile navigation when chat items are reloaded
+  const observer = new MutationObserver(function (mutations) {
+    mutations.forEach(function (mutation) {
+      if (mutation.type === "childList") {
+        handleMobileChatNavigation();
+      }
+    });
+  });
+
+  const chatSidebar = document.querySelector(".chat-sidebar");
+  if (chatSidebar) {
+    observer.observe(chatSidebar, { childList: true, subtree: true });
+  }
+});
 
 // Handle contacts view
 document.addEventListener("DOMContentLoaded", function () {
@@ -35,6 +180,11 @@ document.addEventListener("DOMContentLoaded", function () {
     contacts_link.addEventListener("click", function (e) {
       e.preventDefault();
       setActiveMenuItem(this);
+
+      // Close navigation in mobile mode
+      if (window.innerWidth <= 768) {
+        closeNavigation();
+      }
 
       // Load contacts into sidebar
       fetch("contacts_sidebar.php", {
@@ -86,6 +236,11 @@ document.addEventListener("DOMContentLoaded", function () {
     chats_link.addEventListener("click", function (e) {
       e.preventDefault();
       setActiveMenuItem(this);
+
+      // Close navigation in mobile mode
+      if (window.innerWidth <= 768) {
+        closeNavigation();
+      }
 
       const chat_side_bar = document.querySelector(".chat-sidebar");
       if (chat_side_bar && chat_side_bar.dataset.originalContent) {
@@ -186,3 +341,13 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
+
+// Function to set active menu item
+function setActiveMenuItem(clicked_link) {
+  // Remove active class from all nav links
+  document.querySelectorAll(".nav-menu .nav-link").forEach((link) => {
+    link.classList.remove("active");
+  });
+  // Add active class to clicked link
+  clicked_link.classList.add("active");
+}

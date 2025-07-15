@@ -33,11 +33,207 @@ body {
 }
 
 /* Header styles */
-.contacts-sidebar .sidebar-header,
+.contacts-sidebar .contact-header,
 .chat-list-header {
     padding: 16px;
     border-bottom: 1px solid var(--app-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+/* Enhanced Responsive Layout Styles */
+
+/* Tablet styles */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .main-layout {
+        margin-left: 60px;
+        transition: margin-left 0.3s ease;
+    }
+
+    .main-layout.nav-expanded {
+        margin-left: 60px;
+        /* Keep collapsed on tablet */
+    }
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    body {
+        font-size: 16px;
+        /* Better base font size for mobile */
+        line-height: 1.5;
+    }
+
+    .main-layout {
+        margin-left: 0;
+        height: 100vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .main-layout.nav-expanded {
+        margin-left: 0;
+    }
+
+    /* Enhanced touch targets */
+    button,
+    .btn,
+    a {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Better form controls */
+    input,
+    textarea,
+    select {
+        /*font-size: 16px;*/
+        /* Prevents zoom on iOS */
+        /*
+        min-height: 44px;
+        padding: 10px 12px;
+        */
+    }
+
+    /* Sticky headers */
+    .contacts-sidebar .contact-header,
+    .chat-list-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--app-sidebar-bg);
+        border-bottom: 1px solid var(--app-border);
+    }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+    body {
+        font-size: 15px;
+    }
+
+    .contacts-sidebar .contact-header,
+    .chat-list-header {
+        padding: 12px 16px;
+    }
+
+    .contacts-sidebar .contact-header h5,
+    .chat-list-header h5 {
+        font-size: 16px;
+        margin: 0;
+    }
+
+    /* Smaller touch targets for very small screens */
+    button,
+    .btn,
+    a {
+        min-height: 42px;
+        font-size: 15px;
+    }
+
+    input,
+    textarea,
+    select {
+        font-size: 15px;
+        min-height: 42px;
+        padding: 8px 10px;
+    }
+}
+
+/* Extra small mobile */
+@media (max-width: 360px) {
+    body {
+        font-size: 14px;
+    }
+
+    .contacts-sidebar .contact-header,
+    .chat-list-header {
+        padding: 10px 14px;
+    }
+
+    .contacts-sidebar .contact-header h5,
+    .chat-list-header h5 {
+        font-size: 15px;
+    }
+
+    button,
+    .btn,
+    a {
+        min-height: 40px;
+        font-size: 14px;
+        padding: 8px 12px;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+
+    .contacts-sidebar .contact-header,
+    .chat-list-header {
+        padding: 8px 16px;
+    }
+
+    .main-layout {
+        height: 100vh;
+    }
+}
+
+/* High DPI display optimizations */
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi) {
+    body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    .user-avatar,
+    .btn,
+    button {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}
+
+/* Focus improvements for accessibility */
+@media (max-width: 768px) {
+    *:focus {
+        outline: 2px solid var(--app-primary);
+        outline-offset: 2px;
+    }
+
+    button:focus,
+    .btn:focus,
+    input:focus,
+    textarea:focus,
+    select:focus {
+        box-shadow: 0 0 0 3px rgba(44, 107, 237, 0.15);
+    }
+}
+
+/* Print styles */
+@media print {
+
+    .vertical-nav,
+    .chat-sidebar,
+    .chat-input,
+    .dropdown,
+    button {
+        display: none !important;
+    }
+
+    .main-layout {
+        margin-left: 0;
+    }
+
+    .chat-main {
+        display: block !important;
+    }
+
+    .message {
+        break-inside: avoid;
+        margin-bottom: 10px;
+    }
 }

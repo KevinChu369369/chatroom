@@ -2,6 +2,9 @@
 require_once __DIR__ . '/../check_session.php';
 ?>
 <nav class="vertical-nav">
+    <button class="nav-close-btn d-md-none" type="button">
+        <i class="bi bi-x-lg"></i>
+    </button>
     <div class="nav-toggle">
         <button class="navbar-toggler" type="button">
             <i class="bi bi-list"></i>

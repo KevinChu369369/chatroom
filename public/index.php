@@ -113,6 +113,9 @@ function get_initials($name)
         <!-- Sidebar -->
         <div class="chat-sidebar">
             <div class="chat-list-header">
+                <button class="mobile-nav-toggle d-md-none" type="button">
+                    <i class="bi bi-list"></i>
+                </button>
                 <h5 class="mb-0">Chats</h5>
             </div>
             <div class="chat-list">
@@ -172,6 +175,7 @@ function get_initials($name)
     <?php include 'modals/members_modal.php'; ?>
     <?php include 'modals/leave_admin_modal.php'; ?>
     <?php include 'modals/starred_modal.php'; ?>
+    <?php include 'modals/create_group_modal.php'; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/picmo@latest/dist/umd/index.js"></script>
@@ -348,6 +352,23 @@ function get_initials($name)
                     }
                 }, 2000);
             }
+
+            // Handle mobile menu toggle
+            const mobileNavToggle = document.querySelector('.mobile-nav-toggle');
+            if (mobileNavToggle) {
+                mobileNavToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const verticalNav = document.querySelector('.vertical-nav');
+                    if (verticalNav) {
+                        if (verticalNav.classList.contains('expanded')) {
+                            closeNavigation();
+                        } else {
+                            openNavigation();
+                        }
+                    }
+                });
+            }
+
         });
 
         function formatDate(date_str) {

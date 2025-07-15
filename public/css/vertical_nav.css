@@ -157,3 +157,186 @@
     outline: none;
     box-shadow: none;
 }
+
+/* Enhanced Responsive Styles for Vertical Navigation */
+
+/* Tablet styles */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .vertical-nav {
+        width: 60px;
+    }
+
+    .vertical-nav .nav-link span {
+        display: none;
+    }
+
+    .nav-header {
+        opacity: 0;
+    }
+}
+
+/* Enhanced Mobile Styles */
+@media (max-width: 768px) {
+    .vertical-nav {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        z-index: 1003;
+    }
+
+    .vertical-nav.expanded {
+        transform: translateX(0);
+        width: 100%;
+    }
+
+    .vertical-nav .nav-header {
+        opacity: 1;
+    }
+
+    .vertical-nav .nav-link span {
+        opacity: 1;
+        display: inline;
+    }
+
+    .nav-header {
+        opacity: 1;
+        padding: 1rem;
+        border-bottom: 1px solid var(--app-border);
+    }
+
+    .nav-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: var(--app-text);
+    }
+
+    .nav-toggle {
+        padding: 1rem;
+        border-bottom: 1px solid var(--app-border);
+        background: var(--app-bg);
+    }
+
+    .nav-link {
+        padding: 1rem 1.5rem;
+        min-height: 56px;
+        /* Better touch targets */
+        display: flex;
+        align-items: center;
+    }
+
+    .nav-link span {
+        display: inline;
+        opacity: 1;
+        margin-left: 1rem;
+        font-size: 16px;
+    }
+
+    .nav-link i {
+        font-size: 1.5rem;
+        min-width: 24px;
+    }
+
+    /* Close navigation when clicking outside */
+    .nav-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 999;
+        display: none;
+    }
+
+    .nav-overlay.active {
+        display: block;
+    }
+
+    /* Better touch interaction */
+    .navbar-toggler {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: background-color 0.2s;
+    }
+
+    .navbar-toggler:hover {
+        background-color: var(--app-hover);
+    }
+
+    .navbar-toggler i {
+        font-size: 1.5rem;
+        color: var(--app-text);
+    }
+
+    .nav-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: none;
+        border: none;
+        color: var(--app-text);
+        font-size: 1.25rem;
+        padding: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1;
+    }
+
+    .nav-close-btn:hover {
+        color: var(--app-primary);
+    }
+}
+
+/* Small mobile adjustments */
+@media (max-width: 480px) {
+    .vertical-nav {
+        width: 280px;
+        /* Slightly smaller on very small screens */
+    }
+
+    .nav-link {
+        padding: 0.875rem 1.25rem;
+        min-height: 52px;
+    }
+
+    .nav-link span {
+        font-size: 15px;
+    }
+
+    .nav-link i {
+        font-size: 1.25rem;
+    }
+}
+
+/* Landscape orientation for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .nav-header {
+        padding: 0.5rem 1rem;
+    }
+
+    .nav-toggle {
+        padding: 0.5rem 1rem;
+    }
+
+    .nav-link {
+        padding: 0.75rem 1.25rem;
+        min-height: 48px;
+    }
+}
+
+/* High DPI screens */
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi) {
+    .nav-link i {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}

@@ -66,6 +66,7 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+
 .modal-header {
     border-bottom: 1px solid var(--app-border);
     padding: 1rem 1.5rem;
@@ -89,4 +90,247 @@
 .form-control:focus {
     border-color: var(--app-primary);
     box-shadow: 0 0 0 0.2rem rgba(44, 107, 237, 0.15);
+}
+
+/* Enhanced Responsive Styles for Contacts Sidebar */
+
+/* Tablet styles */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .contact-item {
+        padding: 14px 16px;
+    }
+
+    .contact-name,
+    .contact-email {
+        font-size: 0.95em;
+    }
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    .contacts-sidebar {
+        width: 100%;
+        height: 100vh;
+    }
+
+    .contacts-list {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        /* Smooth scrolling on iOS */
+    }
+
+    .contact-item {
+        padding: 16px;
+        min-height: 72px;
+        /* Better touch targets */
+        border-bottom: 1px solid var(--app-border);
+    }
+
+    .contact-item:hover {
+        background-color: var(--app-hover);
+    }
+
+    .contact-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .contact-name {
+        font-size: 16px;
+        font-weight: 500;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .contact-email {
+        font-size: 14px;
+        color: var(--app-text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Search box mobile improvements */
+    .contacts-sidebar .search-box {
+        padding: 16px;
+        background: var(--app-bg);
+        border-bottom: 1px solid var(--app-border);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .contacts-sidebar .search-box input {
+        font-size: 16px;
+        /* Prevents zoom on iOS */
+        padding: 12px 16px;
+        border-radius: 10px;
+        border: 1px solid var(--app-border);
+        background-color: var(--app-hover);
+        width: 100%;
+    }
+
+    .contacts-sidebar .search-box input:focus {
+        outline: none;
+        border-color: var(--app-primary);
+        box-shadow: 0 0 0 3px rgba(44, 107, 237, 0.1);
+    }
+
+    /* Modal improvements for mobile */
+    .modal-dialog {
+        margin: 1rem;
+        max-width: calc(100% - 2rem);
+    }
+
+    .modal-content {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--app-border);
+    }
+
+    .modal-header .modal-title {
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--app-border);
+    }
+
+    .form-control {
+        font-size: 16px;
+        /* Prevents zoom on iOS */
+        padding: 12px 16px;
+        border: 1px solid var(--app-border);
+        border-radius: 10px;
+        min-height: 48px;
+        /* Better touch targets */
+    }
+
+    .form-control:focus {
+        border-color: var(--app-primary);
+        box-shadow: 0 0 0 3px rgba(44, 107, 237, 0.15);
+    }
+
+    .btn {
+        min-height: 44px;
+        padding: 10px 20px;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+
+    .btn-primary {
+        background-color: var(--app-primary);
+        border-color: var(--app-primary);
+    }
+
+    .btn-secondary {
+        background-color: var(--app-hover);
+        border-color: var(--app-border);
+        color: var(--app-text);
+    }
+}
+
+/* Small mobile adjustments */
+@media (max-width: 480px) {
+    .contact-item {
+        padding: 14px 16px;
+        min-height: 68px;
+    }
+
+    .contact-name {
+        font-size: 15px;
+    }
+
+    .contact-email {
+        font-size: 13px;
+    }
+
+    .contacts-sidebar .search-box {
+        padding: 12px 16px;
+    }
+
+    .contacts-sidebar .search-box input {
+        padding: 10px 14px;
+        font-size: 15px;
+    }
+
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 1rem;
+    }
+
+    .form-control {
+        padding: 10px 14px;
+        font-size: 15px;
+        min-height: 44px;
+    }
+
+    .btn {
+        min-height: 42px;
+        padding: 8px 16px;
+        font-size: 15px;
+    }
+}
+
+/* Extra small mobile */
+@media (max-width: 360px) {
+    .contact-item {
+        padding: 12px 14px;
+        min-height: 64px;
+    }
+
+    .contact-name {
+        font-size: 14px;
+    }
+
+    .contact-email {
+        font-size: 12px;
+    }
+
+    .contacts-sidebar .search-box {
+        padding: 10px 14px;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 0.875rem;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+    .contacts-sidebar .search-box {
+        padding: 8px 16px;
+    }
+
+    .contact-item {
+        padding: 10px 16px;
+        min-height: 56px;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 0.75rem 1rem;
+    }
 }
