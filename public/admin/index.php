@@ -10,7 +10,7 @@ $result = $stmt->get_result();
 $user = $result->fetch_assoc();
 
 if (!$user['is_admin']) {
-    header('Location: ../login.php');
+    header('Location: /chatroom/public/index.php');
     exit;
 }
 ?>

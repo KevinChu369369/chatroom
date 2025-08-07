@@ -33,6 +33,14 @@ require_once __DIR__ . '/../check_session.php';
                     <span>Starred Messages</span>
                 </a>
             </li>
+            <?php if ($_SESSION['is_admin']) : ?>
+                <li class="nav-item">
+                    <a class="nav-link" href="admin/index.php">
+                        <i class="bi bi-person-circle"></i>
+                        <span>Admin</span>
+                    </a>
+                </li>
+            <?php endif; ?>
             <li class="nav-item">
                 <a class="nav-link" href="auth.php?action=logout">
                     <i class="bi bi-box-arrow-right"></i>
