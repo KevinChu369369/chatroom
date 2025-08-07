@@ -187,7 +187,6 @@
             })
             .catch(error => {
                 messages_container.innerHTML = '<div class="no-starred-messages">Error loading starred messages</div>';
-                console.log("Error loading starred messages", error);
             });
     }
 

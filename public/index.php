@@ -6,11 +6,16 @@ require_once __DIR__ . '/../config.php';
 $stmt = $conn->prepare("
     SELECT c.*, u.username as creator_name,
     (SELECT COUNT(*) FROM unread_messages um WHERE um.chatroom_id = c.id AND um.user_id = ? AND um.is_read = FALSE) as unread_count,
+    (SELECT COUNT(*) FROM chatroom_members WHERE chatroom_id = c.id AND is_active = TRUE) as member_count,
     (SELECT m.content 
      FROM messages m 
      LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
      WHERE m.chatroom_id = c.id 
      AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+     AND (
+         (m.is_system = TRUE AND m.user_id = ?) 
+         OR m.is_system = FALSE
+     )
      ORDER BY m.created_at DESC LIMIT 1) as latest_message
     FROM chatrooms c
     JOIN chatroom_members cm ON c.id = cm.chatroom_id
@@ -28,11 +33,22 @@ $stmt = $conn->prepare("
             SELECT 1 FROM messages m 
             WHERE m.chatroom_id = c.id 
             AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+            AND (
+                (m.is_system = TRUE AND m.user_id = ?) 
+                OR m.is_system = FALSE
+            )
+        )
+        OR EXISTS (
+            SELECT 1 FROM chatroom_members cm2
+            JOIN chatrooms c2 ON cm2.chatroom_id = c2.id
+            WHERE c2.is_group = TRUE
+            AND cm2.user_id = u.id
+            AND cm2.is_active = TRUE
         )
     )
-    ORDER BY c.name
+    ORDER BY c.id DESC
 ");
-$stmt->bind_param("iiii", $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id']);
+$stmt->bind_param("iiiiii", $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id']);
 $stmt->execute();
 $chatrooms = $stmt->get_result();
 
@@ -126,7 +142,10 @@ function get_initials($name)
                 ?>
                     <div class="chat-item <?php echo $is_active ? 'active' : ''; ?>"
                         data-chatroom-id="<?php echo $chatroom['id']; ?>"
-                        data-is-group="<?php echo $chatroom['is_group']; ?>">
+                        data-is-group="<?php echo $chatroom['is_group']; ?>"
+                        data-creator-id="<?php echo $chatroom['created_by']; ?>"
+                        data-creator-name="<?php echo htmlspecialchars($chatroom['creator_name']); ?>"
+                        data-member-count="<?php echo $chatroom['member_count']; ?>">
                         <div class="user-avatar">
                             <?php echo get_initials(define_room_name($chatroom)); ?>
                         </div>
@@ -176,6 +195,7 @@ function get_initials($name)
     <?php include 'modals/leave_admin_modal.php'; ?>
     <?php include 'modals/starred_modal.php'; ?>
     <?php include 'modals/create_group_modal.php'; ?>
+    <?php include 'modals/group_settings_modal.php'; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/picmo@latest/dist/umd/index.js"></script>
@@ -183,7 +203,6 @@ function get_initials($name)
     <script src="js/websocket.js"></script>
     <script src="js/contacts_sidebar.js"></script>
     <script>
-        let chat_ws;
         let current_room = 0;
         let current_user = '<?php echo $_SESSION['username']; ?>';
         let is_group = false;
@@ -194,15 +213,16 @@ function get_initials($name)
             current_room = chatroom_id;
 
             // Join the chatroom via WebSocket
-            if (chat_ws && chat_ws.is_connected) {
-                chat_ws.joinChatroom(chatroom_id);
+            if (window.chat_ws && window.chat_ws.is_connected) {
+                window.chat_ws.joinChatroom(chatroom_id);
             } else {
-                chat_ws.requestMessageHistory(chatroom_id);
+                window.chat_ws.requestMessageHistory(chatroom_id);
             }
         }
 
         // Function to generate chat interface
         function generateChatInterface(room_data) {
+
             return `
                 <div class="chat-header">
                     <div class="user-avatar">
@@ -223,6 +243,9 @@ function get_initials($name)
                             ${room_data.is_group ? `
                                 <li><a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#membersModal">
                                         <i class="bi bi-people-fill"></i> View Members
+                                    </a></li>
+                                <li><a class="dropdown-item" onclick="showGroupSettings()">
+                                        <i class="bi bi-gear-fill"></i> Group Settings
                                     </a></li>
                                 ${room_data.is_creator ? `
                                     <li><a class="dropdown-item" onclick="showLeaveAdminModal()">
@@ -260,8 +283,8 @@ function get_initials($name)
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize WebSocket
-            chat_ws = new WebSocketHandler(<?php echo $_SESSION['user_id']; ?>);
-            chat_ws.connect();
+            window.chat_ws = new WebSocketHandler(<?php echo $_SESSION['user_id']; ?>);
+            window.chat_ws.connect();
 
             // Make addChatroomToSidebar available globally
             window.addChatroomToSidebar = addChatroomToSidebar;
@@ -272,104 +295,111 @@ function get_initials($name)
                 triggerElement: document.getElementById('emojiButton')
             });
 
-            // Chat item click handler
-            document.querySelectorAll('.chat-item').forEach(item => {
-                item.addEventListener('click', function() {
-                    const chatroom_id = parseInt(this.dataset.chatroomId);
-                    document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
-                    this.classList.add('active');
+            // Chat item click handler with event delegation
+            document.querySelector('.chat-list').addEventListener('click', function(e) {
+                const chat_item = e.target.closest('.chat-item');
+                if (!chat_item) return;
+                const chatroom_id = parseInt(chat_item.dataset.chatroomId);
+                document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+                chat_item.classList.add('active');
 
-                    // Update current room and group status
-                    current_room = chatroom_id;
-                    is_group = this.querySelector('.chat-info').dataset.isGroup === '1';
+                // Update current room and group status
+                current_room = chatroom_id;
+                is_group = chat_item.querySelector('.chat-info').dataset.isGroup === '1';
 
-                    // Get room data
-                    const room_name_span = this.querySelector('.chat-name span:first-child');
-                    const room_name = room_name_span ? room_name_span.textContent.trim() : '';
-                    const is_group_chat = this.querySelector('.chat-info').dataset.isGroup === '1';
+                // Get room data
+                const room_name_span = chat_item.querySelector('.chat-name span:first-child');
+                const room_name = room_name_span ? room_name_span.textContent.trim() : '';
+                const is_group_chat = chat_item.querySelector('.chat-info').dataset.isGroup === '1';
 
-                    // Hide welcome message and show chat container
-                    document.getElementById('welcome-message').classList.add('d-none');
-                    const chat_container = document.getElementById('chat-container');
-                    chat_container.classList.remove('d-none');
+                // Hide welcome message and show chat container
+                document.getElementById('welcome-message').classList.add('d-none');
+                const chat_container = document.getElementById('chat-container');
+                chat_container.classList.remove('d-none');
 
-                    // Generate and set chat interface
-                    const room_data = {
-                        name: room_name,
-                        is_group: is_group_chat === '1',
-                        member_count: 0,
-                        creator_name: '',
-                        is_creator: false
-                    };
-                    chat_container.innerHTML = generateChatInterface(room_data);
+                // Get creator info from the chatroom item
+                const creator_id = chat_item.dataset.creatorId;
+                const creator_name = chat_item.dataset.creatorName;
+                const member_count = parseInt(chat_item.dataset.memberCount) || 0;
 
-                    // Initialize emoji picker for new chat interface
-                    const emoji_button = document.getElementById('emojiButton');
-                    if (emoji_button) {
-                        emoji_button.addEventListener('click', () => {
-                            picker.toggle();
-                        });
-                    }
+                // Generate and set chat interface
+                const room_data = {
+                    name: room_name,
+                    is_group: is_group_chat === true,
+                    member_count: member_count,
+                    creator_name: creator_name || '',
+                    is_creator: creator_id === '<?php echo $_SESSION['user_id']; ?>'
+                };
 
-                    // Initialize message input event listener
-                    const message_input = document.getElementById('messageInput');
-                    if (message_input) {
-                        message_input.addEventListener('keypress', function(e) {
-                            if (e.key === 'Enter') {
-                                sendMessage();
-                            }
-                        });
-                    }
+                chat_container.innerHTML = generateChatInterface(room_data);
 
-                    history.pushState({
-                        chatroom_id
-                    }, '', 'index.php');
-                    last_message_id = 0;
-                    last_date = '';
-                    loadChatroom(chatroom_id);
-                });
+                // Initialize emoji picker for new chat interface
+                const emoji_button = document.getElementById('emojiButton');
+                if (emoji_button) {
+                    emoji_button.addEventListener('click', () => {
+                        picker.toggle();
+                    });
+                }
+
+                // Initialize message input event listener
+                const message_input = document.getElementById('messageInput');
+                if (message_input) {
+                    message_input.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            sendMessage();
+                        }
+                    });
+                }
+
+                history.pushState({
+                    chatroom_id
+                }, '', 'index.php');
+                last_message_id = 0;
+                last_date = '';
+                loadChatroom(chatroom_id);
             });
+        });
 
-            // Handle browser back/forward navigation
-            window.addEventListener('popstate', function(event) {
-                if (event.state && event.state.chatroom_id) {
-                    const chatroom_id = event.state.chatroom_id;
-                    const chat_item = document.querySelector(`.chat-item[data-chatroom-id="${chatroom_id}"]`);
-                    if (chat_item) {
-                        chat_item.click();
+        // Handle browser back/forward navigation
+        window.addEventListener('popstate', function(event) {
+            if (event.state && event.state.chatroom_id) {
+                const chatroom_id = event.state.chatroom_id;
+                const chat_item = document.querySelector(`.chat-item[data-chatroom-id="${chatroom_id}"]`);
+                if (chat_item) {
+                    chat_item.click();
+                }
+            }
+        });
+
+        // Mark messages as read when entering a chatroom
+        if (current_room > 0) {
+            setTimeout(() => {
+                if (window.chat_ws && window.chat_ws.is_connected) {
+                    window.chat_ws.send({
+                        type: "mark_messages_as_read",
+                        chatroom_id: current_room
+                    });
+                }
+            }, 2000);
+        }
+
+        // Handle mobile menu toggle
+        const mobileNavToggle = document.querySelector('.mobile-nav-toggle');
+        if (mobileNavToggle) {
+            mobileNavToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const verticalNav = document.querySelector('.vertical-nav');
+                if (verticalNav) {
+                    if (verticalNav.classList.contains('expanded')) {
+                        closeNavigation();
+                    } else {
+                        openNavigation();
                     }
                 }
             });
+        }
 
-            // Mark messages as read when entering a chatroom
-            if (current_room > 0) {
-                setTimeout(() => {
-                    if (chat_ws && chat_ws.is_connected) {
-                        chat_ws.send({
-                            type: "mark_messages_as_read",
-                            chatroom_id: current_room
-                        });
-                    }
-                }, 2000);
-            }
 
-            // Handle mobile menu toggle
-            const mobileNavToggle = document.querySelector('.mobile-nav-toggle');
-            if (mobileNavToggle) {
-                mobileNavToggle.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const verticalNav = document.querySelector('.vertical-nav');
-                    if (verticalNav) {
-                        if (verticalNav.classList.contains('expanded')) {
-                            closeNavigation();
-                        } else {
-                            openNavigation();
-                        }
-                    }
-                });
-            }
-
-        });
 
         function formatDate(date_str) {
             const date = new Date(date_str);
@@ -391,7 +421,7 @@ function get_initials($name)
             const message = message_input.value.trim();
 
             if (message && current_room) {
-                chat_ws.sendMessage(message);
+                window.chat_ws.sendMessage(message);
                 message_input.value = '';
             }
         }
@@ -453,9 +483,218 @@ function get_initials($name)
             return initials.substring(0, 2);
         }
 
+        function showGroupSettings() {
+            if (!current_room || !is_group) {
+                alert('Please select a group chat first');
+                return;
+            }
+
+            // Get current group settings
+            fetch('api/group_settings.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `action=get_settings&chatroom_id=${current_room}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Populate the modal with current settings
+                        document.getElementById('settingsChatroomId').value = data.settings.id;
+
+                        // Populate editable inputs (for admins)
+                        document.getElementById('settingsGroupName').value = data.settings.name;
+                        document.getElementById('settingsGroupDescription').value = data.settings.description || '';
+
+                        // Populate view-only elements (for non-admins)
+                        document.getElementById('settingsGroupNameView').textContent = data.settings.name;
+                        document.getElementById('settingsGroupDescriptionView').textContent = data.settings.description || '';
+
+                        // Clear any previous messages
+                        hideGroupSettingsMessages();
+
+                        // Get the modal element
+                        const modal_element = document.getElementById('groupSettingsModal');
+
+                        // Check if user is admin/creator
+                        const chat_item = document.querySelector(`.chat-item[data-chatroom-id="${current_room}"]`);
+                        const is_admin = chat_item && chat_item.dataset.creatorId === '<?php echo $_SESSION['user_id']; ?>';
+
+                        // Set admin mode
+                        if (is_admin) {
+                            modal_element.classList.add('is-admin');
+                        } else {
+                            modal_element.classList.remove('is-admin');
+                        }
+
+                        // Show the modal
+                        const modal = new bootstrap.Modal(modal_element);
+                        modal.show();
+                    } else {
+                        alert(data.message || 'Failed to load group settings');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading group settings:', error);
+                    alert('An error occurred while loading group settings');
+                });
+        }
+
+        function updateGroupSettings() {
+            const form = document.getElementById('groupSettingsForm');
+            const form_data = new FormData(form);
+
+            // Validate
+            const group_name = form_data.get('group_name').trim();
+            if (!group_name) {
+                showGroupSettingsError('Group name is required');
+                return;
+            }
+
+            // Show spinner
+            const spinner = document.getElementById('settingsSpinner');
+            const save_btn = document.querySelector('#groupSettingsModal .btn-primary');
+            spinner.classList.remove('d-none');
+            save_btn.disabled = true;
+
+            // Clear previous messages
+            hideGroupSettingsMessages();
+
+            // Try WebSocket first, fallback to HTTP
+            if (window.chat_ws && window.chat_ws.is_connected) {
+                window.chat_ws.send({
+                    type: 'update_group_settings',
+                    chatroom_id: parseInt(form_data.get('chatroom_id')),
+                    name: group_name,
+                    description: form_data.get('group_description').trim()
+                });
+            } else {
+                // Fallback to HTTP API
+                fetch('api/group_settings.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=update_settings&${new URLSearchParams(form_data).toString()}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        handleGroupSettingsResponse(data);
+                    })
+                    .catch(error => {
+                        console.error('Error updating group settings:', error);
+                        showGroupSettingsError('An error occurred while updating group settings');
+                    })
+                    .finally(() => {
+                        spinner.classList.add('d-none');
+                        save_btn.disabled = false;
+                    });
+            }
+        }
+
+        function handleGroupSettingsResponse(data) {
+            const spinner = document.getElementById('settingsSpinner');
+            const save_btn = document.querySelector('#groupSettingsModal .btn-primary');
+
+            spinner.classList.add('d-none');
+            save_btn.disabled = false;
+
+            if (data.success) {
+                showGroupSettingsSuccess(data.message || 'Group settings updated successfully');
+
+                // Update the UI if name changed
+                if (data.name_changed) {
+                    updateGroupNameInUI(data.settings.name);
+                    // Also update the view-only element
+                    document.getElementById('settingsGroupNameView').textContent = data.settings.name;
+                }
+
+                // Update description view if changed
+                if (data.description_changed) {
+                    document.getElementById('settingsGroupDescriptionView').textContent = data.settings.description || '';
+                }
+
+                // Add system message if any changes were made
+                if (data.system_message) {
+                    window.chat_ws.appendSystemMessage(data.system_message);
+                }
+
+                // Close modal after a short delay
+                setTimeout(() => {
+                    const modal_element = document.getElementById('groupSettingsModal');
+                    const modal = bootstrap.Modal.getInstance(modal_element);
+                    if (modal) {
+                        modal.hide();
+                    } else {
+                        // If no instance exists, create one and hide it
+                        const new_modal = new bootstrap.Modal(modal_element);
+                        new_modal.hide();
+                    }
+                }, 1500);
+            } else {
+                showGroupSettingsError(data.message || 'Failed to update group settings');
+            }
+        }
+
+        function updateGroupNameInUI(new_name) {
+            // Update chat header
+            const room_name_header = document.querySelector('.room-name-header');
+            if (room_name_header) {
+                room_name_header.textContent = new_name;
+            }
+
+            // Update sidebar
+            const active_chat_item = document.querySelector('.chat-item.active .room-name-text');
+            if (active_chat_item) {
+                active_chat_item.textContent = new_name;
+            }
+
+            // Update avatar initials
+            const chat_avatar = document.querySelector('.chat-header .user-avatar');
+            if (chat_avatar) {
+                chat_avatar.textContent = getInitials(new_name);
+            }
+
+            const sidebar_avatar = document.querySelector('.chat-item.active .user-avatar');
+            if (sidebar_avatar) {
+                sidebar_avatar.textContent = getInitials(new_name);
+            }
+        }
+
+        function showGroupSettingsError(message) {
+            const error_element = document.getElementById('groupSettingsError');
+            error_element.textContent = message;
+            error_element.style.display = 'block';
+            document.getElementById('groupSettingsSuccess').style.display = 'none';
+        }
+
+        function showGroupSettingsSuccess(message) {
+            const success_element = document.getElementById('groupSettingsSuccess');
+            success_element.textContent = message;
+            success_element.style.display = 'block';
+            document.getElementById('groupSettingsError').style.display = 'none';
+        }
+
+        function hideGroupSettingsMessages() {
+            document.getElementById('groupSettingsError').style.display = 'none';
+            document.getElementById('groupSettingsSuccess').style.display = 'none';
+        }
+
         function addChatroomToSidebar(chatroom) {
             const chatroom_selector = document.querySelector('.chat-list');
-            if (!chatroom_selector) return;
+
+            // Safety check for null/undefined chatroom
+            if (!chatroom || !chatroom.id) {
+                console.error("Invalid chatroom data:", chatroom);
+                return;
+            }
+
+            if (!chatroom_selector) {
+                console.error("Chat list not found");
+                return;
+            }
+
 
             // Check if chatroom already exists
             let existing_chatroom = document.querySelector(`.chat-item[data-chatroom-id="${chatroom.id}"]`);
@@ -477,6 +716,9 @@ function get_initials($name)
             chatroom_item.className = 'chat-item';
             chatroom_item.dataset.chatroomId = chatroom.id;
             chatroom_item.dataset.isGroup = chatroom.is_group;
+            chatroom_item.dataset.creatorId = chatroom.created_by;
+            chatroom_item.dataset.creatorName = chatroom.creator_name;
+            chatroom_item.dataset.memberCount = chatroom.member_count || 0;
 
             chatroom_item.innerHTML = `
                 <div class="user-avatar">
@@ -505,62 +747,7 @@ function get_initials($name)
                 </div>
             `;
 
-            // Add click handler
-            chatroom_item.addEventListener('click', function() {
-                const chatroom_id = parseInt(this.dataset.chatroomId);
-                document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
-                this.classList.add('active');
 
-                current_room = chatroom_id;
-                is_group = this.querySelector('.chat-info').dataset.isGroup === '1';
-
-                // Get room data
-                const room_name_span = this.querySelector('.chat-name span:first-child');
-                const room_name = room_name_span ? room_name_span.textContent.trim() : '';
-                const is_group_chat = this.querySelector('.chat-info').dataset.isGroup === '1';
-
-                // Hide welcome message and show chat container
-                document.getElementById('welcome-message').classList.add('d-none');
-                const chat_container = document.getElementById('chat-container');
-                chat_container.classList.remove('d-none');
-
-                // Generate and set chat interface
-                const room_data = {
-                    name: room_name,
-                    is_group: is_group_chat === '1',
-                    member_count: 0,
-                    creator_name: '',
-                    is_creator: false
-                };
-                chat_container.innerHTML = generateChatInterface(room_data);
-
-                // Initialize emoji picker for new chat interface
-                const emoji_button = document.getElementById('emojiButton');
-                if (emoji_button) {
-                    emoji_button.addEventListener('click', () => {
-                        picker.toggle();
-                    });
-                }
-
-                // Initialize message input event listener
-                const message_input = document.getElementById('messageInput');
-                if (message_input) {
-                    message_input.addEventListener('keypress', function(e) {
-                        if (e.key === 'Enter') {
-                            sendMessage();
-                        }
-                    });
-                }
-
-                history.pushState({
-                    chatroom_id
-                }, '', 'index.php');
-                last_message_id = 0;
-                last_date = '';
-
-                // Use the global loadChatroom function
-                loadChatroom(chatroom_id);
-            });
 
             // Insert at the beginning of the chat list
             const first_item = chatroom_selector.querySelector('.chat-item');

@@ -70,6 +70,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    cursor: pointer;
 }
 
 .chat-item .dropdown-item:hover {
@@ -184,6 +185,32 @@
     background: var(--app-message-received);
     color: var(--app-text);
     float: left;
+}
+
+.message.system {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 10px auto;
+    width: 100%;
+    padding: 5px 15px;
+}
+
+.message.system .content {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #666;
+    padding: 5px 15px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    max-width: 80%;
+    text-align: center;
+}
+
+.message.system .timestamp {
+    font-size: 0.75em;
+    color: #999;
+    margin-top: 2px;
+    text-align: center;
 }
 
 .message .username {
@@ -359,6 +386,15 @@
 
 .chat-input button:hover {
     background-color: #245ac5;
+}
+
+/* Bootstrap Dropdown Overrides */
+.dropdown-item {
+    cursor: pointer;
+}
+
+.dropdown-item:focus {
+    cursor: pointer;
 }
 
 /* Utilities */
@@ -626,6 +662,7 @@
         min-height: 44px;
         display: flex;
         align-items: center;
+        cursor: pointer;
     }
 
     /* Scroll to bottom button positioning */

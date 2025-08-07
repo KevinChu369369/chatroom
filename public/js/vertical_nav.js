@@ -19,13 +19,11 @@ function createNavOverlay() {
 
 // Function to open navigation
 function openNavigation() {
-  console.log("open Navigation");
   vertical_nav.classList.add("expanded");
   document.querySelector(".main-layout").classList.add("nav-expanded");
 
   // Add overlay on mobile
   if (window.innerWidth <= 768) {
-    console.log("createNavOverlay");
     createNavOverlay();
     document.querySelector(".nav-overlay").classList.add("active");
     document.body.style.overflow = "hidden"; // Prevent background scrolling
@@ -274,11 +272,14 @@ document.addEventListener("DOMContentLoaded", function () {
             const chat_container = document.getElementById("chat-container");
             chat_container.classList.remove("d-none");
 
+            // Get member count from data attribute
+            const member_count = parseInt(this.dataset.memberCount) || 0;
+
             // Generate and set chat interface
             const room_data = {
               name: room_name,
               is_group: is_group_chat === "1",
-              member_count: 0,
+              member_count: member_count,
               creator_name: "",
               is_creator: false,
             };

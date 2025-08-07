@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Get starred messages list for the current user with more details
         // Only include messages from chatrooms where the user is still an active member
         $stmt = $conn->prepare("
-            SELECT m.id, m.content, m.type, m.created_at as timestamp,
+            SELECT m.id, m.content, m.created_at as timestamp,
                    u.username, u.id as user_id,
                    c.name as chatroom_name, c.id as chatroom_id,
                    us.is_online, us.last_seen
@@ -153,7 +153,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'username' => $row['username'],
                 'user_id' => $row['user_id'],
                 'content' => $row['content'],
-                'type' => $row['type'],
                 'timestamp' => $row['timestamp'],
                 'chatroom_name' => $row['chatroom_name'],
                 'chatroom_id' => $row['chatroom_id'],

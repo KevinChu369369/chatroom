@@ -46,7 +46,6 @@ function startChat(userId) {
 function createGroup() {
   const form = document.getElementById("createGroupForm");
   const form_data = new FormData(form);
-  form_data.append("action", "create_group");
 
   // Validate group name
   const group_name = form_data.get("group_name").trim();
@@ -62,23 +61,22 @@ function createGroup() {
     return;
   }
 
-  fetch("api/chatroom_actions.php", {
-    method: "POST",
-    body: form_data,
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (data.success) {
-        // Close the modal and reload the chat list
-        const modal = bootstrap.Modal.getInstance(
-          document.getElementById("createGroupModal")
-        );
-        modal.hide();
-        window.location.reload();
-      } else {
-        showError(data.message);
-      }
+  // Send group creation request via WebSocket
+  if (window.chat_ws && window.chat_ws.is_connected) {
+    window.chat_ws.send({
+      type: "create_group",
+      name: group_name,
+      members: selected_members,
     });
+
+    // Close the modal
+    const modal = bootstrap.Modal.getInstance(
+      document.getElementById("createGroupModal")
+    );
+    modal.hide();
+  } else {
+    showError("WebSocket connection is not available");
+  }
 }
 
 function showError(message) {

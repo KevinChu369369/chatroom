@@ -20,6 +20,8 @@ class WebSocketHandler {
     this.pending_messages = [];
     this.sent_message_ids = new Set();
     this.current_date = null;
+    this.last_load_time = 0; // Track last load time to prevent rapid calls
+    this.load_cooldown = 1000; // 1 second cooldown between loads
     document.addEventListener("click", () => {
       this.attemptReconnect();
     });
@@ -164,6 +166,18 @@ class WebSocketHandler {
 
             case "loaded_messages":
               this.handleLoadedMessages(data);
+              break;
+
+            case "group_created":
+              this.handleGroupCreated(data);
+              break;
+
+            case "new_group_notification":
+              this.handleNewGroupNotification(data);
+              break;
+
+            case "group_settings_updated":
+              this.handleGroupSettingsUpdated(data);
               break;
           }
         } catch (error) {
@@ -336,9 +350,6 @@ class WebSocketHandler {
     ) {
       return;
     }
-
-    const message_date = new Date(message.created_at);
-    const message_date_str = message_date.toLocaleDateString();
 
     const created_message_div = this.createMessageElement(message);
     if (message.temp_id) {
@@ -619,9 +630,18 @@ class WebSocketHandler {
   }
 
   loadMessages(direction = "older") {
+    const now = Date.now();
+
+    // Check cooldown to prevent rapid successive calls
+    if (now - this.last_load_time < this.load_cooldown) {
+      return;
+    }
+
     if (!this.current_chatroom_id || this.is_loading_messages) {
       return;
     }
+
+    this.last_load_time = now;
 
     this.is_loading_messages = true;
 
@@ -692,6 +712,7 @@ class WebSocketHandler {
       // Create a document fragment to hold new messages
       const fragment = document.createDocumentFragment();
       let current_date = data.direction === "older" ? "" : this.last_date;
+      let messages_actually_added = 0; // Track how many messages were actually added
 
       // Process messages in chronological order
       data.messages.forEach((message) => {
@@ -708,9 +729,20 @@ class WebSocketHandler {
           current_date = message_date_str;
         }
 
-        const message_div = this.createMessageElement(message);
+        // Skip system messages that don't belong to the current user
+        if (message.is_system && message.user_id !== this.user_id) {
+          return; // Skip this message in forEach
+        }
+
+        let message_div;
+        if (message.is_system) {
+          message_div = this.createSystemMessageElement(message);
+        } else {
+          message_div = this.createMessageElement(message);
+        }
         message_div.dataset.date = message.created_at;
         fragment.appendChild(message_div);
+        messages_actually_added++; // Increment counter for actually added messages
       });
 
       // Insert messages and maintain scroll position
@@ -724,6 +756,15 @@ class WebSocketHandler {
       }
 
       this.has_more_messages = data.has_more_messages;
+
+      // If no messages were actually added due to filtering, prevent further loading for this direction
+      if (
+        messages_actually_added === 0 &&
+        data.messages &&
+        data.messages.length > 0
+      ) {
+        this.has_more_messages = false;
+      }
     }
 
     this.is_loading_messages = false;
@@ -775,8 +816,19 @@ class WebSocketHandler {
             current_date = message_date;
           }
 
-          // Add message
-          const message_element = this.appendMessage(message);
+          // Skip system messages that don't belong to the current user
+          if (message.is_system && message.user_id !== this.user_id) {
+            return; // Skip this message in forEach
+          }
+
+          // Add message based on type
+          let message_element;
+
+          if (message.is_system) {
+            message_element = this.appendSystemMessage(message);
+          } else {
+            message_element = this.appendMessage(message);
+          }
 
           // Store reference if this is the target message
           if (message.id === data.target_message_id) {
@@ -883,6 +935,179 @@ class WebSocketHandler {
     }
   }
 
+  handleGroupCreated(data) {
+    if (data.success) {
+      // Store the chatroom data temporarily,
+      // this is used to add the chatroom to the sidebar
+      // before the system message is added to the chatroom
+      //vertical_nav.js have the same variable
+      window.pending_chat_room = data.chatroom;
+
+      // Switch to chats view first
+      const chats_btn = document.querySelector("#chats-menu-btn");
+      if (chats_btn) {
+        // when the chats button is clicked, the chats view is switched to
+        // and the chatroom is added to the sidebar(vertical_nav.js code)
+        chats_btn.click();
+      }
+    }
+  }
+
+  handleNewGroupNotification(data) {
+    // Only add if not already being added
+    // Add the new group to the chatroom list
+    const chatroom = data.chatroom;
+    window.addChatroomToSidebar(chatroom);
+  }
+
+  handleGroupSettingsUpdated(data) {
+    if (data.success) {
+      // Check if the current user is the one who made the change
+      const is_current_user_change = data.changed_by_user_id === this.user_id;
+
+      // If we're in the group settings modal and we made the change, handle the response
+      const settings_modal = document.getElementById("groupSettingsModal");
+      if (
+        settings_modal &&
+        settings_modal.classList.contains("show") &&
+        is_current_user_change
+      ) {
+        window.handleGroupSettingsResponse(data);
+      } else {
+        // Update UI for other users (including those with modal open in view-only mode)
+        if (
+          data.name_changed &&
+          data.chatroom_id === this.current_chatroom_id
+        ) {
+          window.updateGroupNameInUI(data.settings.name);
+        }
+
+        // Update view-only elements if modal is open (for non-admin viewers)
+        if (data.name_changed) {
+          const name_view = document.getElementById("settingsGroupNameView");
+          if (name_view) {
+            name_view.textContent = data.settings.name;
+          }
+        }
+
+        if (data.description_changed) {
+          const desc_view = document.getElementById(
+            "settingsGroupDescriptionView"
+          );
+          if (desc_view) {
+            desc_view.textContent = data.settings.description || "";
+          }
+        }
+
+        // Update sidebar for all users
+        if (data.name_changed) {
+          const chatroom_item = document.querySelector(
+            `[data-chatroom-id="${data.chatroom_id}"] .room-name-text`
+          );
+          if (chatroom_item) {
+            chatroom_item.textContent = data.settings.name;
+          }
+
+          // Update avatar
+          const avatar = document.querySelector(
+            `[data-chatroom-id="${data.chatroom_id}"] .user-avatar`
+          );
+          if (avatar) {
+            avatar.textContent = this.getInitials(data.settings.name);
+          }
+        }
+
+        // Add system message if we're viewing this chatroom
+        if (
+          data.system_message &&
+          data.chatroom_id === this.current_chatroom_id
+        ) {
+          this.appendSystemMessage(data.system_message);
+        }
+      }
+    }
+  }
+
+  getInitials(name) {
+    const words = name.split(" ");
+    let initials = "";
+    words.forEach((word) => {
+      initials += word.charAt(0).toUpperCase();
+    });
+    return initials.substring(0, 2);
+  }
+
+  appendSystemMessage(message) {
+    const messages_div = document.getElementById("messages");
+
+    if (!messages_div) return;
+
+    // Check if this system message already exists by ID
+    if (message.id) {
+      const existing_message = messages_div.querySelector(
+        `[data-message-id="${message.id}"]`
+      );
+      if (existing_message) {
+        return existing_message;
+      }
+    }
+
+    const system_div = document.createElement("div");
+    system_div.className = "message system";
+    system_div.dataset.date = message.created_at;
+    if (message.id) {
+      system_div.dataset.messageId = message.id;
+      // Update last_message_id to prevent duplicate loading
+      if (message.id > this.last_message_id) {
+        this.last_message_id = message.id;
+      }
+    }
+
+    const content_div = document.createElement("div");
+    content_div.className = "content";
+    content_div.textContent = message.content;
+
+    const timestamp_div = document.createElement("div");
+    timestamp_div.className = "timestamp";
+    const message_time = new Date(message.created_at);
+    timestamp_div.textContent = message_time.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    system_div.appendChild(content_div);
+    system_div.appendChild(timestamp_div);
+
+    // Add date separator if needed
+    this.updateVisibleDateSeparator();
+
+    // Insert the system message at the appropriate chronological position
+    const existing_messages = Array.from(
+      messages_div.querySelectorAll("[data-date]")
+    );
+    let insert_position = null;
+
+    // Find the correct position to insert based on timestamp
+    for (let i = 0; i < existing_messages.length; i++) {
+      const existing_msg = existing_messages[i];
+      const existing_time = new Date(existing_msg.dataset.date);
+
+      if (message_time < existing_time) {
+        insert_position = existing_msg;
+        break;
+      }
+    }
+
+    if (insert_position) {
+      messages_div.insertBefore(system_div, insert_position);
+    } else {
+      messages_div.appendChild(system_div);
+    }
+
+    return system_div;
+  }
+
   // Helper method to create message element
   createMessageElement(message) {
     const message_div = document.createElement("div");
@@ -907,7 +1132,6 @@ class WebSocketHandler {
 
     const content_div = document.createElement("div");
     content_div.className = "content";
-
     content_div.textContent = message.content;
 
     const timestamp_div = document.createElement("div");
@@ -921,6 +1145,16 @@ class WebSocketHandler {
     });
 
     message_div.appendChild(header_div);
+
+    // Add username for group chats only (above content) - but NOT for system messages
+
+    if (is_group && message.username && !message.is_system) {
+      const username_div = document.createElement("div");
+      username_div.className = "username";
+      username_div.textContent = message.username;
+      message_div.appendChild(username_div);
+    }
+
     message_div.appendChild(content_div);
     message_div.appendChild(timestamp_div);
 
@@ -928,6 +1162,34 @@ class WebSocketHandler {
     this.checkStarStatus(message.id);
 
     return message_div;
+  }
+
+  // Helper method to create system message element (without adding to DOM)
+  createSystemMessageElement(message) {
+    const system_div = document.createElement("div");
+    system_div.className = "message system";
+    system_div.dataset.date = message.created_at;
+    if (message.id) {
+      system_div.dataset.messageId = message.id;
+    }
+
+    const content_div = document.createElement("div");
+    content_div.className = "content";
+    content_div.textContent = message.content;
+
+    const timestamp_div = document.createElement("div");
+    timestamp_div.className = "timestamp";
+    const message_time = new Date(message.created_at);
+    timestamp_div.textContent = message_time.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    system_div.appendChild(content_div);
+    system_div.appendChild(timestamp_div);
+
+    return system_div;
   }
 
   updateMessageStatus(message_id, status) {

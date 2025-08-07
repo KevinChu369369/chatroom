@@ -65,6 +65,19 @@ body {
         line-height: 1.5;
     }
 
+    *:focus {
+        outline: 2px solid var(--app-primary);
+        outline-offset: 2px;
+    }
+
+    button:focus,
+    .btn:focus,
+    input:focus,
+    textarea:focus,
+    select:focus {
+        box-shadow: 0 0 0 3px rgba(44, 107, 237, 0.15);
+    }
+
     .main-layout {
         margin-left: 0;
         height: 100vh;
@@ -84,18 +97,6 @@ body {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-    }
-
-    /* Better form controls */
-    input,
-    textarea,
-    select {
-        /*font-size: 16px;*/
-        /* Prevents zoom on iOS */
-        /*
-        min-height: 44px;
-        padding: 10px 12px;
-        */
     }
 
     /* Sticky headers */
@@ -194,22 +195,6 @@ body {
     button {
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-    }
-}
-
-/* Focus improvements for accessibility */
-@media (max-width: 768px) {
-    *:focus {
-        outline: 2px solid var(--app-primary);
-        outline-offset: 2px;
-    }
-
-    button:focus,
-    .btn:focus,
-    input:focus,
-    textarea:focus,
-    select:focus {
-        box-shadow: 0 0 0 3px rgba(44, 107, 237, 0.15);
     }
 }
 

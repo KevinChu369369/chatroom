@@ -83,6 +83,14 @@ class ChatServer
                 case 'load_messages':
                     $this->handleLoadMessages($server, $frame->fd, $data);
                     break;
+                case 'create_group':
+                    echo date('Y-m-d H:i:s') . " Creating group: " . json_encode($data) . "\n";
+                    $this->handleCreateGroup($server, $frame->fd, $data);
+                    break;
+                case 'update_group_settings':
+                    echo date('Y-m-d H:i:s') . " Updating group settings: " . json_encode($data) . "\n";
+                    $this->handleUpdateGroupSettings($server, $frame->fd, $data);
+                    break;
                 default:
                     $this->sendToClient($server, $frame->fd, [
                         'type' => 'error',
@@ -340,6 +348,7 @@ class ChatServer
                 LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                 WHERE m.chatroom_id = ? AND m.id < ?
                 AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
                 ORDER BY m.created_at DESC
                 LIMIT 25)
                 UNION ALL
@@ -348,7 +357,8 @@ class ChatServer
                 JOIN users u ON m.user_id = u.id
                 LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                 WHERE m.chatroom_id = ? AND m.id = ?
-                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at))
+                AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE))
                 UNION ALL
                 (SELECT m.*, u.username, 'after' as message_group
                 FROM messages m
@@ -356,21 +366,25 @@ class ChatServer
                 LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                 WHERE m.chatroom_id = ? AND m.id > ?
                 AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
                 ORDER BY m.created_at ASC
                 LIMIT 25)
                 ORDER BY created_at ASC
             ");
             $stmt->bind_param(
-                "iiiiiiiii",
+                "iiiiiiiiiiii",
                 $user_id,
                 $chatroom_id,
                 $target_message_id,  // for 'before' query
                 $user_id,
+                $user_id,
                 $chatroom_id,
                 $target_message_id,  // for 'target' query
                 $user_id,
+                $user_id,
                 $chatroom_id,
-                $target_message_id   // for 'after' query
+                $target_message_id,  // for 'after' query
+                $user_id
             );
         } else {
             // Get the oldest unread message ID for this user in this chatroom
@@ -379,8 +393,9 @@ class ChatServer
                 FROM messages m
                 JOIN unread_messages um ON m.id = um.message_id AND um.user_id = ?
                 WHERE m.chatroom_id = ? AND um.is_read = FALSE
+                AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
             ");
-            $stmt->bind_param("ii", $user_id, $chatroom_id);
+            $stmt->bind_param("iii", $user_id, $chatroom_id, $user_id);
             $stmt->execute();
             $unread_result = $stmt->get_result();
             $oldest_unread = $unread_result->fetch_assoc();
@@ -396,6 +411,7 @@ class ChatServer
                     LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                     WHERE m.chatroom_id = ? AND m.id < ?
                     AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
                     ORDER BY m.created_at DESC
                     LIMIT 25)
                     UNION ALL
@@ -405,10 +421,21 @@ class ChatServer
                     LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                     WHERE m.chatroom_id = ? AND m.id >= ?
                     AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
                     ORDER BY m.created_at ASC)
                     ORDER BY created_at ASC
                 ");
-                $stmt->bind_param("iiiiii", $user_id, $chatroom_id, $oldest_unread_id, $user_id, $chatroom_id, $oldest_unread_id);
+                $stmt->bind_param(
+                    "iiiiiiii",
+                    $user_id,
+                    $chatroom_id,
+                    $oldest_unread_id,
+                    $user_id,
+                    $user_id,
+                    $chatroom_id,
+                    $oldest_unread_id,
+                    $user_id
+                );
             } else {
                 $stmt = $this->db->prepare("
                     SELECT m.*, u.username, 'read' as message_group
@@ -417,10 +444,11 @@ class ChatServer
                     LEFT JOIN deleted_messages dm ON m.chatroom_id = dm.chatroom_id AND dm.user_id = ?
                     WHERE m.chatroom_id = ?
                     AND (dm.deleted_at IS NULL OR m.created_at > dm.deleted_at)
+                    AND ((m.is_system = TRUE AND m.user_id = ?) OR m.is_system = FALSE)
                     ORDER BY m.created_at DESC
                     LIMIT 50
                 ");
-                $stmt->bind_param("ii", $user_id, $chatroom_id);
+                $stmt->bind_param("iii", $user_id, $chatroom_id, $user_id);
             }
         }
 
@@ -459,7 +487,8 @@ class ChatServer
                 'username' => $msg['username'],
                 'content' => $msg['content'],
                 'created_at' => date('Y-m-d H:i:s', strtotime($msg['created_at'])),
-                'is_unread' => $is_unread
+                'is_unread' => $is_unread,
+                'is_system' => $msg['is_system'] ?? false
             ];
         }, $messages);
 
@@ -505,7 +534,8 @@ class ChatServer
                 'user_id' => $row['user_id'],
                 'username' => $row['username'],
                 'message' => $row['content'],
-                'created_at' => $row['created_at']
+                'created_at' => $row['created_at'],
+                'is_system' => $row['is_system'] ?? false
             ];
         }
 
@@ -608,9 +638,10 @@ class ChatServer
         // Get all active chatrooms for the user
         $stmt = $this->db->prepare("
             SELECT 
-                c.id, 
-                c.name, 
-                c.is_group,
+                c.*, 
+                u.username as creator_name,
+                c.created_by as creator_id,
+                (SELECT COUNT(*) FROM chatroom_members WHERE chatroom_id = c.id AND is_active = TRUE) as member_count,
                 (SELECT COUNT(*) FROM unread_messages um 
                  WHERE um.chatroom_id = c.id 
                  AND um.user_id = ? 
@@ -623,6 +654,7 @@ class ChatServer
                  ORDER BY m.created_at DESC LIMIT 1) as latest_message
             FROM chatroom_members cm
             JOIN chatrooms c ON cm.chatroom_id = c.id
+            JOIN users u ON c.created_by = u.id
             WHERE cm.user_id = ? AND cm.is_active = TRUE
             ORDER BY c.name
         ");
@@ -632,12 +664,27 @@ class ChatServer
 
         $chatrooms = [];
         while ($row = $result->fetch_assoc()) {
+            // If there's no message yet and it's a group chat, show system message
+            if (!$row['latest_message'] && $row['is_group']) {
+                if ($row['creator_id'] == $user_id) {
+                    $row['latest_message'] = 'You created the group';
+                } else {
+                    // Calculate other members count (excluding current user)
+                    $others_count = $row['member_count'] - 2; // -2 for creator and current user
+                    $others_text = $others_count > 0 ? " and {$others_count} others" : "";
+                    $row['latest_message'] = "{$row['creator_name']} added you{$others_text} to the group";
+                }
+            }
+
             $chatrooms[] = [
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'is_group' => $row['is_group'],
+                'member_count' => (int)$row['member_count'],
                 'unread_count' => (int)$row['unread_count'],
-                'latest_message' => $row['latest_message']
+                'latest_message' => $row['latest_message'],
+                'created_by' => $row['creator_id'],
+                'creator_name' => $row['creator_name']
             ];
         }
 
@@ -709,7 +756,8 @@ class ChatServer
                 'username' => $row['username'],
                 'content' => $row['content'],
                 'created_at' => date('Y-m-d H:i:s', strtotime($row['created_at'])),
-                'is_unread' => false // Loaded messages are always considered read
+                'is_unread' => false, // Loaded messages are always considered read
+                'is_system' => $row['is_system'] ?? false
             ];
         }
 
@@ -726,6 +774,375 @@ class ChatServer
             'has_more_messages' => count($messages) >= 50,
             'should_scroll' => $direction === 'newer' && count($messages) > 0
         ]);
+    }
+
+    private function handleCreateGroup($server, $fd, $data)
+    {
+        if (!isset($data['name']) || !isset($data['members'])) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Group name and members are required'
+            ]);
+            return;
+        }
+
+        $creator_id = $this->getUserIdByFd($fd);
+        $group_name = $data['name'];
+        $members = $data['members'];
+
+        // Start transaction
+        $this->db->begin_transaction();
+
+        try {
+            // Create the group chatroom
+            $stmt = $this->db->prepare("
+                INSERT INTO chatrooms (name, created_by, is_group)
+                VALUES (?, ?, TRUE)
+            ");
+            $stmt->bind_param("si", $group_name, $creator_id);
+            $stmt->execute();
+            $chatroom_id = $this->db->insert_id;
+
+            // Add creator as member
+            $stmt = $this->db->prepare("
+                INSERT INTO chatroom_members (chatroom_id, user_id)
+                VALUES (?, ?)
+            ");
+            $stmt->bind_param("ii", $chatroom_id, $creator_id);
+            $stmt->execute();
+
+            // Add selected members
+            foreach ($members as $member_id) {
+                $stmt->bind_param("ii", $chatroom_id, $member_id);
+                $stmt->execute();
+            }
+
+            // Get creator's username
+            $stmt = $this->db->prepare("SELECT username FROM users WHERE id = ?");
+            $stmt->bind_param("i", $creator_id);
+            $stmt->execute();
+            $creator = $stmt->get_result()->fetch_assoc();
+            $creator_name = $creator['username'];
+
+            // Store system message for creator
+            $creator_message = "You created the group";
+            $stmt = $this->db->prepare("
+                INSERT INTO messages (chatroom_id, user_id, content, is_system)
+                VALUES (?, ?, ?, TRUE)
+            ");
+            $stmt->bind_param("iis", $chatroom_id, $creator_id, $creator_message);
+            $stmt->execute();
+
+            // Calculate other members count
+            $others_count = count($members) - 1;
+            $others_text = $others_count > 0 ? " and {$others_count} others" : "";
+
+            // Store system message for each member (excluding creator)
+            foreach ($members as $member_id) {
+                if ($member_id != $creator_id) {
+                    $member_message = "{$creator_name} added you{$others_text} to the group";
+                    $stmt = $this->db->prepare("
+                        INSERT INTO messages (chatroom_id, user_id, content, is_system)
+                        VALUES (?, ?, ?, TRUE)
+                    ");
+                    $stmt->bind_param("iis", $chatroom_id, $member_id, $member_message);
+                    $stmt->execute();
+                }
+            }
+
+            $this->db->commit();
+
+            // Get the newly created chatroom details
+            $stmt = $this->db->prepare("
+                SELECT 
+                    c.*, 
+                    u.username as creator_name,
+                    (SELECT COUNT(*) FROM chatroom_members WHERE chatroom_id = c.id AND is_active = TRUE) as member_count,
+                    ? as latest_message
+                FROM chatrooms c
+                JOIN users u ON c.created_by = u.id
+                WHERE c.id = ?
+            ");
+            $stmt->bind_param("si", $creator_message, $chatroom_id);
+            $stmt->execute();
+            $chatroom = $stmt->get_result()->fetch_assoc();
+
+            // Format chatroom data for creator
+            $creator_chatroom = [
+                'id' => $chatroom['id'],
+                'name' => $chatroom['name'],
+                'is_group' => true,
+                'creator_name' => $chatroom['creator_name'],
+                'created_by' => $creator_id,
+                'member_count' => $chatroom['member_count'],
+                'latest_message' => $creator_message,
+                'unread_count' => 0
+            ];
+
+            // Send success response to creator
+            $this->sendToClient($server, $fd, [
+                'type' => 'group_created',
+                'success' => true,
+                'chatroom' => $creator_chatroom,
+                'system_message' => [
+                    'type' => 'system',
+                    'is_system' => true,
+                    'content' => $creator_message,
+                    'created_at' => date('Y-m-d H:i:s')
+                ]
+            ]);
+
+            // Notify other members
+            foreach ($members as $member_id) {
+                if ($member_id != $creator_id && isset($this->user_connections[$member_id])) {
+                    $member_message = "{$creator_name} added you{$others_text} to the group";
+                    $member_chatroom = array_merge($creator_chatroom, [
+                        'latest_message' => $member_message
+                    ]);
+
+                    echo "sending to client $member_id from new_group_notification\n";
+
+                    $this->sendToClient($server, $this->user_connections[$member_id], [
+                        'type' => 'new_group_notification',
+                        'chatroom' => $member_chatroom,
+                        'system_message' => [
+                            'type' => 'system',
+                            'is_system' => true,
+                            'content' => $member_message,
+                            'created_at' => date('Y-m-d H:i:s')
+                        ]
+                    ]);
+                }
+            }
+        } catch (Exception $e) {
+            // Rollback on error
+            $this->db->rollback();
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Failed to create group: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    private function handleUpdateGroupSettings($server, $fd, $data)
+    {
+        if (!isset($data['chatroom_id']) || !isset($data['name'])) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Chatroom ID and name are required'
+            ]);
+            return;
+        }
+
+        $user_id = $this->getUserIdByFd($fd);
+        $chatroom_id = $data['chatroom_id'];
+        $group_name = trim($data['name']);
+        $group_description = trim($data['description'] ?? '');
+
+        // Validate input
+        if (empty($group_name)) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Group name is required'
+            ]);
+            return;
+        }
+
+        if (strlen($group_name) > 30) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Group name is too long (maximum 30 characters)'
+            ]);
+            return;
+        }
+
+        if (strlen($group_description) > 255) {
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Description is too long (maximum 255 characters)'
+            ]);
+            return;
+        }
+
+        try {
+            // Check if user is the creator of the chatroom
+            $stmt = $this->db->prepare("
+                SELECT c.id, c.name, c.description, c.created_by
+                FROM chatrooms c
+                JOIN chatroom_members cm ON c.id = cm.chatroom_id
+                WHERE c.id = ? AND cm.user_id = ? AND cm.is_active = TRUE AND c.is_group = TRUE AND c.created_by = ?
+            ");
+            $stmt->bind_param("iii", $chatroom_id, $user_id, $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $chatroom = $result->fetch_assoc();
+
+            if (!$chatroom) {
+                $this->sendToClient($server, $fd, [
+                    'type' => 'error',
+                    'message' => 'Chatroom not found or you are not authorized to update settings'
+                ]);
+                return;
+            }
+
+            // Check if there are any changes
+            $name_changed = $chatroom['name'] !== $group_name;
+            $description_changed = ($chatroom['description'] ?? '') !== $group_description;
+
+            if (!$name_changed && !$description_changed) {
+                $this->sendToClient($server, $fd, [
+                    'type' => 'group_settings_updated',
+                    'success' => true,
+                    'message' => 'No changes detected',
+                    'settings' => [
+                        'id' => $chatroom_id,
+                        'name' => $group_name,
+                        'description' => $group_description
+                    ],
+                    'name_changed' => false,
+                    'description_changed' => false,
+                    'changed_by_user_id' => $user_id
+                ]);
+                return;
+            }
+
+            // Update the chatroom settings
+            $stmt = $this->db->prepare("
+                UPDATE chatrooms 
+                SET name = ?, description = ? 
+                WHERE id = ?
+            ");
+            $stmt->bind_param("ssi", $group_name, $group_description, $chatroom_id);
+            $stmt->execute();
+
+            // Create system message for settings update
+            $changes = [];
+            if ($name_changed) {
+                $changes[] = "name";
+            }
+            if ($description_changed) {
+                $changes[] = "description";
+            }
+
+            $change_text = implode(" and ", $changes);
+
+            // Get the username of the person making the change
+            $stmt = $this->db->prepare("SELECT username FROM users WHERE id = ?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $changer = $stmt->get_result()->fetch_assoc();
+            $changer_name = $changer['username'];
+
+            // Store personalized system messages for all active members
+            $stmt = $this->db->prepare("
+                SELECT user_id FROM chatroom_members 
+                WHERE chatroom_id = ? AND is_active = TRUE
+            ");
+            $stmt->bind_param("i", $chatroom_id);
+            $stmt->execute();
+            $members_result = $stmt->get_result();
+
+            $stmt = $this->db->prepare("
+                INSERT INTO messages (chatroom_id, user_id, content, is_system)
+                VALUES (?, ?, ?, TRUE)
+            ");
+
+            $user_message_ids = []; // Store message IDs for each user
+
+            while ($member = $members_result->fetch_assoc()) {
+                $member_id = $member['user_id'];
+                if ($member_id == $user_id) {
+                    // Message for the person who made the change
+                    if ($change_text == "name") {
+                        $message_content = "You updated group name to $group_name";
+                    } else if ($change_text == "description") {
+                        $message_content = "You updated group description";
+                    } else if ($change_text == "name and description") {
+                        $message_content = "You updated group name to $group_name and description";
+                    }
+                } else {
+                    // Message for other members
+                    if ($change_text == "name") {
+                        $message_content = "$changer_name updated group name to $group_name";
+                    } else if ($change_text == "description") {
+                        $message_content = "$changer_name updated group description";
+                    } else if ($change_text == "name and description") {
+                        $message_content = "$changer_name updated group name to $group_name and description";
+                    }
+                }
+                $stmt->bind_param("iis", $chatroom_id, $member_id, $message_content);
+                $stmt->execute();
+
+                // Store the message ID for this user
+                $user_message_ids[$member_id] = $this->db->insert_id;
+            }
+
+            // Get all active members for broadcasting
+            $stmt = $this->db->prepare("
+                SELECT user_id 
+                FROM chatroom_members 
+                WHERE chatroom_id = ? AND is_active = TRUE
+            ");
+            $stmt->bind_param("i", $chatroom_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            $settings_data = [
+                'id' => $chatroom_id,
+                'name' => $group_name,
+                'description' => $group_description
+            ];
+
+            // Broadcast settings update to all active members
+            while ($member = $result->fetch_assoc()) {
+                $member_id = $member['user_id'];
+                if (isset($this->user_connections[$member_id])) {
+                    // Determine the appropriate system message for this user
+                    if ($member_id == $user_id) {
+                        if ($change_text == "name") {
+                            $user_system_message = "You updated group name to $group_name";
+                        } else if ($change_text == "description") {
+                            $user_system_message = "You updated group description";
+                        } else if ($change_text == "name and description") {
+                            $user_system_message = "You updated group name to $group_name and description";
+                        }
+                    } else {
+                        if ($change_text == "name") {
+                            $user_system_message = "$changer_name updated group name to $group_name";
+                        } else if ($change_text == "description") {
+                            $user_system_message = "$changer_name updated group description";
+                        } else if ($change_text == "name and description") {
+                            $user_system_message = "$changer_name updated group name to $group_name and description";
+                        }
+                    }
+
+                    $response = [
+                        'type' => 'group_settings_updated',
+                        'success' => true,
+                        'chatroom_id' => $chatroom_id,
+                        'settings' => $settings_data,
+                        'system_message' => [
+                            'id' => $user_message_ids[$member_id],
+                            'type' => 'system',
+                            'is_system' => true,
+                            'content' => $user_system_message,
+                            'created_at' => date('Y-m-d H:i:s')
+                        ],
+                        'name_changed' => $name_changed,
+                        'description_changed' => $description_changed,
+                        'changed_by_user_id' => $user_id
+                    ];
+
+                    $this->sendToClient($server, $this->user_connections[$member_id], $response);
+                }
+            }
+        } catch (Exception $e) {
+            echo date('Y-m-d H:i:s') . " Error updating group settings: " . $e->getMessage() . "\n";
+            $this->sendToClient($server, $fd, [
+                'type' => 'error',
+                'message' => 'Failed to update group settings'
+            ]);
+        }
     }
 
     private function isUserInChatroom($user_id, $chatroom_id)
