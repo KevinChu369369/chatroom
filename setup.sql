@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS chatrooms (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    description TEXT,
     created_by INT NOT NULL,
     is_group BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS chatroom_members (
     chatroom_id INT NOT NULL,
     user_id INT NOT NULL,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE,
     PRIMARY KEY (chatroom_id, user_id),
     FOREIGN KEY (chatroom_id) REFERENCES chatrooms(id),
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS messages (
     chatroom_id INT NOT NULL,
     user_id INT NOT NULL,
     content TEXT NOT NULL,
+    is_system BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (chatroom_id) REFERENCES chatrooms(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -58,7 +61,6 @@ CREATE TABLE IF NOT EXISTS user_status (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Create unread_messages table
 CREATE TABLE IF NOT EXISTS unread_messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -79,7 +81,7 @@ CREATE TABLE IF NOT EXISTS ws_tokens (
     expires_at DATETIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-)
+);
 
 CREATE TABLE IF NOT EXISTS deleted_messages (
     user_id INT NOT NULL,
@@ -89,3 +91,5 @@ CREATE TABLE IF NOT EXISTS deleted_messages (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (chatroom_id) REFERENCES chatrooms(id) ON DELETE CASCADE
 );
+
+
